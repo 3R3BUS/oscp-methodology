@@ -70,6 +70,19 @@ nmap --script "default,vuln" -oA nmap-vulnscan <target>
 nmap --script smb-brute --script-args userdb=users.txt,passdb=pass.txt -p445 <target>
 ```
 
+### nmap-vulners (vulners.com CVE lookup NSE script)
+Cross-references `-sV` version-detection output against the vulners.com CVE database and prints matching CVE IDs + CVSS scores per service. Not bundled with stock nmap on all distros — install once, then it runs like any other `--script`.
+```bash
+# Install (one-time)
+git clone https://github.com/vulnersCom/nmap-vulners.git
+cp nmap-vulners/vulners.nse ~/.nmap/scripts/      # or /usr/share/nmap/scripts/ on Kali
+nmap --script-updatedb
+
+# Usage — requires -sV (it reads the detected product/version strings)
+nmap -sV --script vulners <target>
+nmap -sV --script vulners --script-args mincvss=7.0 -p- <target>   # only CVSS >= 7.0
+```
+
 ---
 
 ## 2. Directory/Content Discovery — gobuster / feroxbuster / ffuf
@@ -341,3 +354,24 @@ reset
 export SHELL=bash
 stty rows <N> columns <N>   # match local terminal size
 ```
+
+---
+
+## 7. CVE / Exploit Lookup by Service + Version
+
+Once `nmap -sV` (or banner grabbing) gives you a product and version string, feed it into these — most take a free-text `<software> <version>` query directly, e.g. `wordpress 4.7`, `openssh 7.2`, `linux kernel 5.4`, `vsftpd 2.3.4`.
+
+| Tool / Site | Type | Query pattern | Notes |
+|---|---|---|---|
+| **searchsploit** (offline Exploit-DB mirror, ships with Kali) | CLI | `searchsploit wordpress 4.7` | Fastest first check, no network needed; `-w` prints the online exploit-db.com URL, `-m <id>` copies a PoC locally |
+| [Exploit-DB](https://www.exploit-db.com/search) | Web | Product + version filter fields | Canonical source `searchsploit` mirrors; check here if the local DB is stale |
+| [vulners.com](https://vulners.com/) | Web + API | `wordpress 4.7` in the search bar | Aggregates NVD/CVE + vendor advisories + exploit refs in one result list; backs the `nmap-vulners` NSE script above |
+| [cvedetails.com version search](https://www.cvedetails.com/version-search.php) | Web | Vendor / product / version dropdowns | Best when you know exact vendor+product; supports one trailing wildcard (e.g. `4.7*`); results cap at 100 per query so add the version to narrow a popular product |
+| [NVD search](https://nvd.nist.gov/vuln/search) | Web + API | Keyword search, e.g. `vsftpd 2.3.4` | Authoritative CVE descriptions/CVSS/CPE; slower to update with exploit links than vulners/Exploit-DB |
+| [sploitus.com](https://sploitus.com/) | Web | `apache struts 2.3` | Search engine over Exploit-DB, Metasploit, GitHub PoC repos, and Packet Storm in one query |
+| [Rapid7 Vulnerability & Exploit DB](https://www.rapid7.com/db/) | Web | `<product> <version>` search box | Cross-links matching Metasploit module names directly — useful to jump straight to `msfconsole` |
+| [Packet Storm Security](https://packetstormsecurity.com/search/?q=) | Web | `<product> <version>` | Good secondary source when Exploit-DB has no PoC for a niche CVE |
+| `msf > search` (Metasploit) | CLI | `search type:exploit name:wordpress` or `search cve:2021-41773` | Cross-check once you have a candidate CVE — confirms whether a ready module exists before hand-rolling a PoC |
+| [GitHub Advisory DB](https://github.com/advisories) | Web | Filter by ecosystem + package name/version | Best for app-level library CVEs (npm/pip/composer/gem packages) rather than network services |
+
+**Workflow tip:** run `searchsploit <product> <version>` first (fast, offline, works without exam network egress concerns), then confirm/deepen with `vulners.com` or `nvd.nist.gov` if searchsploit comes up empty or you need the full CVE writeup for the exam report.
