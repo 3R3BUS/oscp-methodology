@@ -12,6 +12,15 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > tooling reference material — the kind of thing you're expected to know going *into* the exam,
 > not anything from a specific exam attempt.
 
+**Companion deep-dive files** (added in a second research pass, same repo):
+[`CHEATSHEET.md`](CHEATSHEET.md) (command/flags quick reference) ·
+[`EXAM-TIPS.md`](EXAM-TIPS.md) (proctoring, time budgeting, documentation rules) ·
+[`notes/adcs-certipy-cheatsheet.md`](notes/adcs-certipy-cheatsheet.md) ·
+[`notes/ad-coercion-and-relay.md`](notes/ad-coercion-and-relay.md) ·
+[`notes/windows-lateral-movement-persistence.md`](notes/windows-lateral-movement-persistence.md) ·
+[`notes/linux-privesc-advanced.md`](notes/linux-privesc-advanced.md) ·
+[`notes/web-attack-techniques.md`](notes/web-attack-techniques.md)
+
 ---
 
 ## 1. Official OffSec / OSCP Materials
@@ -24,7 +33,7 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | PEN-200 2023 Course & Exam Update | https://www.offsec.com/blog/pen-200-2023/ | **Confirms Buffer Overflow was removed from the exam body of knowledge**; course rebalanced toward web, privesc, and AD. See §9 below. |
 | OSCP Exam Structure Change | https://www.offsec.com/blog/oscp-exam-structure/ | Current point breakdown (see §1.1). |
 | PWK Example Report (PDF) | https://www.offsec.com/pwk-online/PWK-Example-Report-v1.pdf | Official sample report — expected format/depth for findings. |
-| OSCP Exam Report Template | https://www.offsec.com/pwk-online/OSCP-Exam-Report.docx | Current official reporting template (verify .docx vs legacy .odt at booking — both circulate). |
+| OSCP Exam Report Template | https://www.offsec.com/pwk-online/OSCP-Exam-Report.docx · https://www.offsec.com/pwk-online/OSCP-Exam-Report.odt | **Verified:** OffSec provides both formats side-by-side (same pattern for OSEP/OSED/OSWE); [PEN-200 Reporting Requirements](https://help.offsec.com/hc/en-us/articles/360046787731-PEN-200-Reporting-Requirements) confirms Word + OpenOffice/LibreOffice options. The final submission must be a PDF inside a `.7z` archive regardless of which template you start from. |
 | OffSec Help Center | https://help.offsec.com/hc/en-us | KB hub: exam logistics, proctoring, ID verification, connectivity issues. |
 | Discord Access & Support Guide | https://help.offsec.com/hc/en-us/articles/4404373510164-Discord-Access-and-Support-Guide | How to link your OffSec account to the official Discord. |
 | OffSec Official Discord | https://discord.com/invite/offsec | ~95k-member, staff-monitored community/help server. |
@@ -60,11 +69,12 @@ to **authorized** penetration testing education and OSCP exam preparation.
 
 | Resource | URL | Notes |
 |---|---|---|
-| TJnull's OSCP-like list (via 0xdf mirror) | https://0xdf.gitlab.io/cheatsheets/offsec | The canonical, reliably-updated mirror with linked writeups (the original Google Sheet URL rotates — verify current link via r/oscp wiki before relying on it). |
+| TJnull's OSCP-like list ("NetSecFocus Trophy Room") | https://docs.google.com/spreadsheets/d/1dwSMIAPIam0PuRBkCiDI88pU3yzrqqHkDtBngUHNCw8/edit | **Verified (medium-high confidence):** the list's actual title/location is the "NetSecFocus Trophy Room" Google Sheet — not a TJnull-branded domain. Multiple independent searches converge on this doc ID; could not visually confirm the live page renders (network policy blocked docs.google.com during verification) — spot-check before relying on it long-term. |
+| TJnull's list mirror | https://0xdf.gitlab.io/cheatsheets/offsec | Reliable fallback mirror with linked writeups if the Sheet link ever rots. |
 | awesome-oscp | https://github.com/0x4d31/awesome-oscp | Curated GitHub list of OSCP study resources, tools, and machine lists. |
-| verylazytech/OSCP-Resources | https://github.com/verylazytech/OSCP-Resources | Actively maintained syllabus/exam-guide mirror + resource compilation. |
+| verylazytech/OSCP-Resources | https://github.com/verylazytech/OSCP-Resources | Actively maintained syllabus/exam-guide mirror + resource compilation; also mirrors the official Exam Guide text (useful since help.offsec.com blocks automated fetchers). |
 | TJnull list sorted by difficulty | https://github.com/Shellshock9001/Tjs-Nulls-OSCP-list-in-order-from-easy-medium-hard-insane-more-challenging-and-alphabetical | Reorganizes TJnull's list by difficulty and alphabetically. |
-| NetSecFocus | https://netsec-focus.github.io/ | Community hub; origin of the informal "Trophy Room" OSCP-completion tracking culture *(verify current chat platform/link)*. |
+| NetSecFocus | https://netsec-focus.github.io/ | Origin of the "Trophy Room" list culture. **Verified:** NetSecFocus's own Mattermost server has been down since ~late 2021 with no officially-announced replacement platform — treat "still down, no official successor" as current best answer, not a certainty (site itself was unreachable during verification). |
 
 ## 4. Methodology & Cheat-Sheet References
 
@@ -84,6 +94,10 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | OWASP Web Security Testing Guide (WSTG) | https://owasp.org/www-project-web-security-testing-guide/ | De-facto test catalogue for web apps; 12 categories, numbered reproducible test cases. |
 | OWASP ASVS | https://owasp.org/www-project-application-security-verification-standard/ | Tiered (L1/L2/L3) requirements defining "secure" per control area. |
 | PortSwigger Web Security Academy | https://portswigger.net/web-security | Free, continuously updated labs for every major web vuln class. |
+
+> **Deep-dive:** [`notes/web-attack-techniques.md`](notes/web-attack-techniques.md) covers file-upload bypass
+> (extension/content-type/magic-byte/polyglot), insecure deserialization basics (PHP/Java/Python), WordPress
+> enumeration/exploitation via wpscan, and a generic CMS/framework fingerprinting workflow.
 
 ## 5. Recon & External Enumeration
 
@@ -141,6 +155,14 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | GPP credential abuse (KB2962486) | https://support.microsoft.com/kb/2962486 | Group Policy Preferences `cpassword` decryption background. |
 | SharpGPOAbuse | https://github.com/FSecureLABS/SharpGPOAbuse | GPO write-permission abuse tooling. |
 
+> **Deep-dive command references (added in the second research pass):**
+> [`notes/adcs-certipy-cheatsheet.md`](notes/adcs-certipy-cheatsheet.md) — full Certipy `find`/`req`/`auth`/`shadow`/`account`
+> syntax with worked ESC1/ESC3/ESC8 examples. [`notes/ad-coercion-and-relay.md`](notes/ad-coercion-and-relay.md) —
+> PetitPotam/PrinterBug/ShadowCoerce/DFSCoerce + `ntlmrelayx` chains to RBCD/Shadow Credentials/ADCS ESC8
+> (confirmed gap in `security-practitioners-guide` — no dedicated entry exists there yet).
+> [`notes/windows-lateral-movement-persistence.md`](notes/windows-lateral-movement-persistence.md) — DCOM/WMI/schtasks/PsExec
+> lateral movement plus AdminSDHolder/DCShadow/Skeleton Key persistence at reference level.
+
 ## 7. Windows Privilege Escalation
 
 | Resource | URL | Notes |
@@ -165,6 +187,11 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | pspy | https://github.com/DominicBreuker/pspy | Unprivileged process monitoring — catches cron jobs/privileged process activity. |
 | GTFOBins | https://gtfobins.github.io/ | Unix binary privesc/breakout via `sudo -l`, SUID, capabilities. |
 | unix-privesc-check | (bundled in Kali) | Legacy but still-useful automated Linux privesc checklist. |
+
+> **Deep-dive:** [`notes/linux-privesc-advanced.md`](notes/linux-privesc-advanced.md) covers capabilities abuse,
+> cron/PATH/wildcard injection, NFS `no_root_squash`, Docker/LXD group breakout, writable `/etc/passwd`,
+> the kernel-exploit lookup workflow, and `LD_PRELOAD`/library hijacking — with detection + exploitation
+> commands for each.
 
 ## 9. Buffer Overflow / Exploit Development
 
@@ -219,7 +246,8 @@ to **authorized** penetration testing education and OSCP exam preparation.
 |---|---|---|
 | OffSec Official Discord | https://discord.com/invite/offsec | Largest official, staff-monitored hub. |
 | r/oscp | https://www.reddit.com/r/oscp/ | Primary subreddit for OSCP discussion and exam-day advice. |
-| NetSecFocus | https://netsec-focus.github.io/ | Community hub; origin of the "Trophy Room" tracking culture *(verify current chat platform)*. |
+| NetSecFocus | https://netsec-focus.github.io/ | Origin of the "Trophy Room" tracking culture; **verified: its Mattermost chat has been down since ~2021 with no official successor announced** — treat as an archive/list source, not an active chat community. |
+| InfoSec Prep Discord | https://discord.gg/infosecprep | Community-run Discord commonly cited as where OSCP-prep chat activity dispersed to after NetSecFocus's Mattermost went down (not an official NetSecFocus successor). |
 | TechExams — OSCP forum | https://community.infosecinstitute.com/discussion/127097/discord-oscp-channel | Longstanding certification discussion forum. |
 
 ## 14. Methodology Video/Blog Channels
@@ -247,14 +275,44 @@ to **authorized** penetration testing education and OSCP exam preparation.
   across multiple Windows privesc techniques). Exam-attempt-specific content (target IPs, flags,
   credentials) was deliberately excluded from this document per OffSec's exam NDA.
 
-## 16. Open Items for the Next Research/Writing Pass
+## 16. Open Items — Status
 
-- [ ] Verify the current TJnull spreadsheet URL directly (rotates periodically) and the exact
-      NetSecFocus/"Trophy Room" chat platform link before citing them as primary sources.
-- [ ] Confirm whether the currently-issued OSCP report template is `.docx` or `.odt` at exam booking.
+**Resolved in the second research pass (deep-dive workflow):**
+
+- [x] TJnull spreadsheet URL and NetSecFocus chat platform — verified, see §3/§13 (medium-high
+      confidence; both relied on WebSearch snippets since docs.google.com/netsecfocus.com blocked
+      automated fetches during verification — spot-check periodically).
+- [x] OSCP report template format — verified both `.docx` and `.odt` are officially provided, see §1.
+- [x] ADCS command cheat-sheet — done, see [`notes/adcs-certipy-cheatsheet.md`](notes/adcs-certipy-cheatsheet.md)
+      (ESC1–ESC8 summary table + worked ESC1/ESC3/ESC8 examples).
+- [x] Wordlist/payload/command quick-reference appendix — done, see [`CHEATSHEET.md`](CHEATSHEET.md)
+      (nmap, gobuster/feroxbuster/ffuf, SecLists paths, hashcat `-m` modes, msfvenom, reverse-shell
+      one-liners).
+- [x] Exam-day logistics (proctoring, time budgeting, documentation/proof-file rules, AI-tool policy) —
+      done, see [`EXAM-TIPS.md`](EXAM-TIPS.md).
+- [x] AD coercion/relay chain (PetitPotam/PrinterBug/ShadowCoerce/DFSCoerce → `ntlmrelayx` → RBCD/Shadow
+      Credentials/ADCS ESC8) — done, see [`notes/ad-coercion-and-relay.md`](notes/ad-coercion-and-relay.md).
+      **Confirmed as a genuine content gap in `security-practitioners-guide`** (no dedicated entry exists
+      there for any of these four coercion primitives) — worth upstreaming into that repo separately.
+- [x] Windows lateral movement beyond Kerberos tickets (DCOM/WMI/schtasks/PsExec) and reference-level AD
+      persistence (AdminSDHolder/DCShadow/Skeleton Key) — done, see
+      [`notes/windows-lateral-movement-persistence.md`](notes/windows-lateral-movement-persistence.md).
+- [x] Deeper Linux privesc (capabilities, cron/PATH/wildcard, NFS, Docker/LXD, kernel-exploit workflow,
+      LD_PRELOAD) — done, see [`notes/linux-privesc-advanced.md`](notes/linux-privesc-advanced.md).
+- [x] Deeper web attack techniques (upload bypass, deserialization, WordPress, CMS fingerprinting) — done,
+      see [`notes/web-attack-techniques.md`](notes/web-attack-techniques.md).
+
+**Still open:**
+
 - [ ] Build the full step-by-step **methodology document** (separate from this resource list) that
       sequences: recon → web → initial access → Windows/Linux privesc → AD enumeration → AD attack →
-      lateral movement → reporting, using the flow captured in §15.
-- [ ] Add a dedicated Active Directory Certificate Services (ADCS) command cheat-sheet section
-      (Certipy `find`/`req`/`auth` workflow) — currently only referenced, not detailed.
-- [ ] Add a wordlist/payload quick-reference appendix (SecLists paths, common hashcat mode numbers).
+      lateral movement → reporting, using the flow captured in §15 and stitching together all the
+      companion files above into one linear walkthrough.
+- [ ] Upstream the AD coercion/relay content gap identified above into `security-practitioners-guide`
+      (`content/offsec/ptint/` or a new `content/resources/` entry), since it's a real gap in that repo,
+      not just this one.
+- [ ] Re-verify the TJnull Google Sheet and NetSecFocus links with a direct (non-automated) browser check
+      before treating them as stable long-term citations — verification this pass was search-snippet-only
+      due to outbound network policy blocking docs.google.com/netsecfocus.com/help.offsec.com directly.
+- [ ] Consider a short ADCS ESC9–ESC16 addendum (current cheat sheet covers ESC1–ESC8 in depth; ESC9/10
+      security-extension bypass and ESC13/15 issuance-policy abuse are newer and increasingly tested).
