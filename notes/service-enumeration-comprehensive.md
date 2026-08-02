@@ -1051,6 +1051,23 @@ ssh-keyscan -t rsa <ip> | ssh-keygen -lf -
 `ssh-keyscan` grabs a host's public key(s) without authenticating; piping into `ssh-keygen -lf -` gets the fingerprint for comparing whether two "different" hosts actually share the same underlying SSH host key (common on cloned VM templates — a strong signal the whole fleet shares one image, and possibly one set of credentials/keys).
 Source: general OpenSSH `ssh-keyscan` manual usage; corroborated by https://github.com/kaio6fellipe/ssh-enum
 
+**29b. Edge case — SSH agent forwarding abuse**
+```
+# on a box where you land with agent forwarding already enabled (check first):
+echo $SSH_AUTH_SOCK
+ssh-add -l
+
+# if a socket exists and lists identities, you can piggyback on someone else's forwarded agent
+# to authenticate onward to hosts *without* ever seeing the private key material:
+ssh -o StrictHostKeyChecking=no <other-user>@<other-host>   # uses the forwarded agent transparently
+
+# hunting for other users' forwarded-agent sockets you have read/connect access to:
+find /tmp -type s -name 'agent.*' 2>/dev/null
+SSH_AUTH_SOCK=/tmp/ssh-XXXXXXXXXX/agent.1234 ssh-add -l
+```
+If `ForwardAgent yes` is set (globally in `/etc/ssh/ssh_config` or per-host) and a legitimate user SSHes into the box you've compromised while their agent is forwarded, their agent socket is briefly usable by anyone who can access it during that session (typically requires matching the connecting user's UID, but root or a misconfigured socket permission can expose it) — letting you authenticate to every host their key is trusted on without ever exfiltrating the private key itself. Always check `$SSH_AUTH_SOCK`/`ssh-add -l` immediately after landing a shell.
+Source: https://en.wikipedia.org/wiki/Ssh-agent ; https://book.hacktricks.xyz/generic-methodologies-and-resources/exfiltration#ssh-agent-forwarding-abuse
+
 **30. netexec SSH module (credential/key spraying)**
 ```
 nxc ssh <ip> -u root -p '<pass>'
@@ -1430,6 +1447,25 @@ snmpbulkwalk -v2c -c public <target> .
 ```
 Uses `GETBULK` instead of repeated `GETNEXT`, pulling multiple OIDs per request — noticeably faster than `snmpwalk` against devices exposing large MIB trees (e.g. big routers/switches).
 Source: [SNMPWALK Examples for Windows and Linux — ITT Systems](https://www.ittsystems.com/snmpwalk-examples/)
+
+**Edge case — SNMPv3 (no community string, user-based security)**
+SNMPv3 replaces the plaintext community string with per-user authentication (`authNoPriv`/`authPriv`) and optional encryption, so `onesixtyone`/`hydra`-style community brute forcing does not apply — a device with v1/v2c fully disabled (common on hardened routers/exam boxes) still responds to v3 with a valid/guessed username.
+```
+# discover whether v3 is enabled/usable and enumerate a valid engineID with no creds
+snmpwalk -v3 -l noAuthNoPriv -u <username-guess> <target>
+
+# authNoPriv: username + auth protocol/password, no encryption
+snmpwalk -v3 -l authNoPriv -u admin -a MD5 -A <auth_password> <target>
+
+# authPriv: username + auth (MD5/SHA) + privacy/encryption (DES/AES) — full v3 auth
+snmpwalk -v3 -l authPriv -u admin -a SHA -A <auth_password> -x AES -X <priv_password> <target>
+
+# Metasploit/nmap can brute the v3 username itself since usernames (unlike v2c strings) are
+# sometimes unauthenticated-readable via engine discovery:
+nmap -sU -p161 --script snmp-info <target>
+```
+Explanation: try `noAuthNoPriv` first (some devices leak `sysDescr`/engineID to any valid username with no password); if that fails, brute the username against common defaults (`admin`, `public`, vendor defaults) before attempting auth/priv passwords — this is a materially different workflow from v1/v2c and easy to miss if a candidate only rehearses community-string brute forcing.
+Source: [Net-SNMP snmpcmd manpage — SNMPv3 options](http://www.net-snmp.org/docs/man/snmpcmd.html) / [Pentesting SNMP — HackTricks](https://hacktricks.wiki/en/network-services-pentesting/pentesting-snmp/index.html)
 
 ---
 
