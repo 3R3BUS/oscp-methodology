@@ -34,7 +34,8 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`notes/credentials-harvesting-post-exploitation.md`](notes/credentials-harvesting-post-exploitation.md) ·
 [`notes/password-attacks-advanced.md`](notes/password-attacks-advanced.md) ·
 [`notes/pivoting-tunneling.md`](notes/pivoting-tunneling.md) ·
-[`notes/file-transfer-matrix.md`](notes/file-transfer-matrix.md)
+[`notes/file-transfer-matrix.md`](notes/file-transfer-matrix.md) ·
+[`notes/reporting-methodology.md`](notes/reporting-methodology.md)
 
 > **Start here for the AD set:** [`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md)
 > is the sequenced, numbered walkthrough of the whole AD attack chain (assumed-breach credential →
@@ -317,6 +318,14 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | noraj — OSCP Markdown Report Template | https://github.com/noraj/OSCP-Exam-Report-Template-Markdown | Markdown reimplementation of the official OffSec report template. |
 | chvancooten — OSCP Markdown Templates | https://github.com/chvancooten/OSCP-MarkdownReportingTemplates | Widely-used markdown exam/lab report templates + enum script. |
 
+> **Deep-dive:** [`notes/reporting-methodology.md`](notes/reporting-methodology.md) covers what this
+> table doesn't — the actual report structure matching OffSec's official template (executive summary
+> vs. technical findings split, per-target section skeleton, methodology narrative), the exam-day
+> note-capture-to-report pipeline (what to record live vs. reconstruct during the 24h write-up window),
+> a CVSS-adjacent severity reference table for common OSCP finding types, and a pre-submission QA
+> checklist. Cross-references [`EXAM-TIPS.md`](EXAM-TIPS.md) §3 for proof-file/screenshot rules rather
+> than repeating them.
+
 ## 13. Communities
 
 | Community | URL | Notes |
@@ -420,6 +429,13 @@ to **authorized** penetration testing education and OSCP exam preparation.
       ESC11 (NTLM relay to ICPR RPC), ESC12 (CA private key access), ESC13 (issuance policy → privileged
       group), ESC14 (explicit certificate mapping), ESC15/EKUwu (CVE-2024-49019), and ESC16 (security
       extension disabled CA-wide).
+
+- [x] Report structuring/writing methodology — the actual gap was that §12 only listed note-taking
+      *tools* and `EXAM-TIPS.md` §3 only covered proctoring proof-file/screenshot rules, with nothing
+      on how to structure and write the submitted report itself — done, see
+      [`notes/reporting-methodology.md`](notes/reporting-methodology.md) (report skeleton matching
+      OffSec's official template, live-capture-to-report pipeline, CVSS-adjacent severity reference
+      table for common finding types, pre-submission QA checklist).
 
 **Still open:**
 

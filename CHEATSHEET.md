@@ -2,10 +2,18 @@
 
 ## 1. Nmap — Scanning
 
+### Recommended sequence (first pass on a new host)
+1. Fast full TCP port sweep, no scripts (below) — find what's actually open before spending time on `-sC`/`-sV`.
+2. Feed those ports into a targeted `-sC -sV` scan (below) — much faster than a `-p- -sC -sV -O` run against all 65535 ports.
+3. Kick off the UDP top-100 sweep in the background in parallel with 1–2 — UDP-only services (SNMP, TFTP, NFS, DNS) are the easiest ports to miss on OSCP boxes.
+4. Once services are fingerprinted, run `--script vuln` / `nmap-vulners` to flag obvious CVEs before manual digging.
+5. Optionally run AutoRecon alongside 1–4 as a safety net (`notes/enum-automation-frameworks.md`) — don't block on it, keep enumerating manually in the foreground.
+
 ### Initial full TCP port discovery (fast, all ports)
 ```bash
-nmap -p- --min-rate=1000 -T4 -oN nmap-allports.txt <target>
+nmap -p- --min-rate=1000 -T4 -oA nmap-allports <target>
 ```
+Use `-oA` (not just `-oN`) here — the targeted-rescan step below greps the `.gnmap` output this produces.
 
 ### Full TCP scan with service/version detection + default scripts
 ```bash
@@ -30,19 +38,30 @@ nmap -p- -sC -sV -O -oA nmap-full <target>
 -T4      Aggressive timing (T0 slowest - T5 fastest)
 --open   Show only open ports
 -A       Aggressive: OS detect + version + scripts + traceroute
+-6       Scan an IPv6 target (combine with -sS/-sC/-sV/-p- as normal)
 ```
+
+### IPv6 target
+```bash
+nmap -6 -p- -sC -sV -oA nmap-ipv6 <target-ipv6-address-or-scope-id>
+```
+Same flags as IPv4 — just add `-6` and pass the IPv6 literal (link-local addresses need a zone/scope ID, e.g. `fe80::1%eth0`). Relevant mainly on AD segments where mitm6 is in play (`notes/password-attacks-advanced.md`) or a host is dual-stack; standalone OSCP boxes are IPv4 almost always.
 
 ### UDP scan (top ports — full UDP is slow, scope common ports first)
 ```bash
-nmap -sU --top-ports 100 -T4 -oN nmap-udp-top100.txt <target>
-sudo nmap -sU -p- --min-rate=1000 -T4 -oN nmap-udp-all.txt <target>
+nmap -sU --top-ports 100 -T4 -oA nmap-udp-top100 <target>
+sudo nmap -sU -p- --min-rate=1000 -T4 -oA nmap-udp-all <target>
 ```
 
 ### Feed discovered open ports back into a targeted deep scan
 ```bash
-# Extract open ports from previous grepable output
+# Extract open TCP ports from previous grepable output
 ports=$(grep -oP '\d{1,5}(?=/open)' nmap-allports.gnmap | tr '\n' ',' | sed 's/,$//')
 nmap -p$ports -sC -sV -oN nmap-targeted.txt <target>
+
+# Same pattern for UDP — version/script-scan just the UDP ports found open above
+udp_ports=$(grep -oP '\d{1,5}(?=/open/udp)' nmap-udp-top100.gnmap | tr '\n' ',' | sed 's/,$//')
+sudo nmap -sU -p$udp_ports -sC -sV -oN nmap-udp-targeted.txt <target>
 ```
 
 ### NSE vulnerability scripts
@@ -51,7 +70,7 @@ nmap -p$ports -sC -sV -oN nmap-targeted.txt <target>
 nmap -p- -sV --script vuln -oN nmap-vuln.txt <target>
 
 # Common specific NSE scripts used on OSCP
-nmap -p445 --script smb-vuln* <target>
+nmap -p445 --script "smb-vuln*" <target>
 nmap -p445 --script smb-os-discovery,smb-enum-shares,smb-enum-users <target>
 nmap -p139,445 --script smb-vuln-ms17-010 <target>          # EternalBlue check
 nmap -p21 --script ftp-anon,ftp-syst <target>
@@ -63,7 +82,7 @@ nmap -p3306 --script mysql-info,mysql-empty-password <target>
 nmap -p1433 --script ms-sql-info,ms-sql-empty-password <target>
 nmap -p161 -sU --script snmp-info,snmp-processes,snmp-netstat <target>
 nmap --script http-enum -p80,443 <target>
-nmap --script http-vuln* -p80,443 <target>
+nmap --script "http-vuln*" -p80,443 <target>
 nmap --script "default,vuln" -oA nmap-vulnscan <target>
 
 # Set script args (e.g. userdb for brute scripts)
