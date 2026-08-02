@@ -35,7 +35,8 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`notes/password-attacks-advanced.md`](notes/password-attacks-advanced.md) ·
 [`notes/pivoting-tunneling.md`](notes/pivoting-tunneling.md) ·
 [`notes/file-transfer-matrix.md`](notes/file-transfer-matrix.md) ·
-[`notes/reporting-methodology.md`](notes/reporting-methodology.md)
+[`notes/reporting-methodology.md`](notes/reporting-methodology.md) ·
+[`scripts/README.md`](scripts/README.md)
 
 > **Start here for the AD set:** [`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md)
 > is the sequenced, numbered walkthrough of the whole AD attack chain (assumed-breach credential →
@@ -347,6 +348,15 @@ to **authorized** penetration testing education and OSCP exam preparation.
 
 ---
 
+## 14.5. Helper Scripts
+
+> **Deep-dive:** [`scripts/README.md`](scripts/README.md) — seven bash wrappers (`fast-nmap.sh`,
+> `web-recon.sh`, `ad-enum.sh`, `ligolo-setup.sh`, `hashid-credcheck.sh`, `privesc-launcher.sh`,
+> `crack.sh`) that operationalize the command sequences already documented across `CHEATSHEET.md`
+> and `notes/*.md` into single commands, rather than fifteen copy-pastes. Enumeration/harvesting
+> only — no auto-exploitation, same scope discipline as the rest of this repo (see the README's own
+> exam-scope note on `web-recon.sh --nuclei-full`, the one genuinely gray flag in the set).
+
 ## 15. Internal Cross-References
 
 - **`security-practitioners-guide`** (this org's CSKB) — `content/offsec/ptext/`, `content/offsec/ptint/`,
@@ -436,6 +446,12 @@ to **authorized** penetration testing education and OSCP exam preparation.
       [`notes/reporting-methodology.md`](notes/reporting-methodology.md) (report skeleton matching
       OffSec's official template, live-capture-to-report pipeline, CVSS-adjacent severity reference
       table for common finding types, pre-submission QA checklist).
+
+- [x] Executable helper scripts operationalizing the documented command sequences (recon, web recon,
+      post-foothold AD enumeration, ligolo pivoting, local-privesc staging, hash cracking) — done, see
+      [`scripts/README.md`](scripts/README.md) §14.5. Enumeration/harvesting only, matching this repo's
+      established exam-scope discipline; the one gray area (`web-recon.sh --nuclei-full`) is gated
+      behind an explicit opt-in flag and warning banner rather than being default behavior.
 
 **Still open:**
 
