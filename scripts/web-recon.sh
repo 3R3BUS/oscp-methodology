@@ -2,6 +2,13 @@
 # web-recon.sh -- whatweb fingerprint, TLS SAN grab, robots.txt/sitemap.xml, ffuf vhost fuzzing,
 # feroxbuster dir/file discovery, and a scoped nuclei pass (full-template nuclei is opt-in only).
 #
+# NOTE: VulnX is intentionally NOT integrated here. It ships a separate auto-exploitation capability
+# ("-e"/"--exploit") that its own docs describe as an "auto shell injector" -- independently finds a
+# vuln and executes/drops a shell with no human decision point in between, which is exactly the
+# OSCP exam's banned "automatic exploitation tools (e.g. db_autopwn, SQLmap)" category. Per this
+# repo's exam-scope discipline, VulnX stays reference-only and is never wired into this script's
+# default or opt-in behavior, even restricted to its non-exploit fingerprinting flags.
+#
 # Usage: web-recon.sh <target-ip-or-host> [--domain example.com] [--nuclei-full]
 set -uo pipefail
 
@@ -11,7 +18,12 @@ NUCLEI_FULL=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --domain) DOMAIN="$2"; shift 2 ;;
+        --domain)
+            if [[ $# -lt 2 ]]; then
+                echo "[!] --domain requires an argument" >&2
+                exit 1
+            fi
+            DOMAIN="$2"; shift 2 ;;
         --nuclei-full) NUCLEI_FULL=1; shift ;;
         -h|--help)
             echo "Usage: $0 <target-ip-or-host> [--domain example.com] [--nuclei-full]" >&2
@@ -124,7 +136,7 @@ echo "=================== SUMMARY: $TARGET ==================="
 [[ -f "$OUT/whatweb.txt" ]] && echo "-- whatweb --" && cat "$OUT/whatweb.txt"
 if [[ -f "$OUT/ferox.txt" ]]; then
     echo "-- feroxbuster hits (2xx/3xx) --"
-    grep -E ' (2[0-9]{2}|3[0-9]{2}) ' "$OUT/ferox.txt" 2>/dev/null | head -n 40
+    grep -E '^(2[0-9]{2}|3[0-9]{2})[[:space:]]' "$OUT/ferox.txt" 2>/dev/null | head -n 40
 fi
 for f in "$OUT/nuclei-scoped.txt" "$OUT/nuclei-full.txt"; do
     [[ -f "$f" && -s "$f" ]] && echo "-- $(basename "$f") --" && cat "$f"

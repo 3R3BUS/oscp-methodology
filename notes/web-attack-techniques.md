@@ -386,6 +386,43 @@ General rule of thumb for the exam: fingerprint → version-pin → searchsploit
 
 ---
 
+### 4.1 VulnX — Multi-CMS Fingerprinting (WordPress/Joomla/Drupal/PrestaShop/OpenCart/Magento/Lokomedia)
+**Explanation:** VulnX is an actively-maintained (v1.9, 320+ commits) multi-CMS scanner — broader than wpscan/droopescan/CMSeeK in that one tool covers WordPress, Joomla, Drupal, PrestaShop, OpenCart, Magento, and Lokomedia detection plus domain/web/port recon in a single pass. Use its enumeration flags as a fast multi-CMS alternative/supplement to step 2 of the workflow above, or once a candidate CMS is already suspected.
+
+**Install:**
+```bash
+git clone https://github.com/anouarbensaad/vulnx.git
+cd vulnx
+pip install -r requirements.txt        # deps: requests, bs4
+python3 vulnx.py -u http://target -c all
+# or the repo's own installer (requires root; installs system-wide to /usr/local/bin/vulnx):
+# chmod +x install.sh && sudo ./install.sh
+```
+
+**Enumeration-only usage:**
+```bash
+vulnx -u http://target -c all              # CMS fingerprint: type, version, themes, plugins, users
+vulnx -u http://target -d -w               # -d: subdomain/domain info gathering, -w: web info (headers/tech)
+vulnx -u http://target -p                  # port scan
+vulnx -u http://target --dns               # DNS record collection
+vulnx -D <dork>                            # search Google dorks for CMS instances (OSINT, no direct target contact)
+vulnx --list-dorks                         # list built-in dork categories
+```
+- `-c/--cms-info` — identifies CMS type/version and enumerates themes, plugins, and users (multi-CMS equivalent of wpscan's `--enumerate vp,vt,u`)
+- `-d/--domain-info` — subdomain gathering against the target's domain
+- `-w/--web-info` — general web/header/tech info gathering
+- `-p/--ports` — port scan of the target
+- `--dns` — DNS record enumeration
+- `-D/--dorks` — Google dork search for the target CMS (passive/OSINT)
+
+All of the above are pure fingerprinting/enumeration — same risk profile as whatweb/wpscan/CMSeeK, and exam-safe.
+
+**Exam caveat:** `-e/--exploit` is documented by VulnX's own README, which describes the tool itself as an "intelligent Bot... Shell can achieve automatic injection" — the flag searches for a vulnerability matching the fingerprinted CMS/version and automatically runs the exploit/drops a shell, with no human decision point in between. This is squarely OffSec's banned "Automatic exploitation tools (e.g., db_autopwn, SQLmap, etc.)" category — never use `-e`/`--exploit` on the OSCP exam. Treat it as reference-only: fingerprint with `-c`/`-d`/`-w` as above, then take the confirmed CMS+version to searchsploit/CVE lookup and a manually-applied PoC per the workflow in §4 — same discipline as the sqlmap (§5) and tplmap (`web-core-vulnerabilities.md` §7.5) `--os-shell`/`--os-cmd` caveats.
+
+**Reference:** https://github.com/anouarbensaad/vulnx
+
+---
+
 ## 5. sqlmap — Tamper Scripts & Shell Escalation
 
 **Explanation:** Beyond `-u`/`--dbs`, sqlmap's tamper scripts rewrite the injection payload (encoding, comment insertion, casing tricks) to evade naive filters/WAFs, and the `--os-shell`/`--sql-shell` flags turn a confirmed injection into OS-level access where DBMS privileges allow it. sqlmap itself (detection, `--dbs`/`--dump`, tamper scripts) is a core OSCP tool with no restriction. **Exam caveat: `--os-shell`/`--os-cmd` (and other fully-automated OS-shell-spawning) are banned on the OSCP exam — see `enum-automation-frameworks.md` §"Banned fully-automated exploitation tools." Treat the commands below as reference-only; on exam day, use sqlmap to confirm/extract via the injection point, then escalate to an OS shell manually (e.g. `INTO OUTFILE`/`xp_cmdshell` crafted by hand) instead of `--os-shell`/`--os-cmd`.**
@@ -428,3 +465,4 @@ sqlmap -u "http://target.com/search" --data="param1=blah&param2=blah" --cookie="
 - WPScan: https://github.com/wpscanteam/wpscan
 - Web Vulnerability Methodology (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/web-vulnerabilities-methodology.html
 - CMSeeK: https://github.com/Tuhinshubhra/CMSeeK
+- VulnX: https://github.com/anouarbensaad/vulnx

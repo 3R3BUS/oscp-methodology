@@ -19,7 +19,7 @@ detect_hash_mode() {
         '$krb5tgs$23$'*)   echo "13100|Kerberos 5 TGS-REP etype 23 (Kerberoast)"; return ;;
         '$krb5asrep$23$'*) echo "18200|Kerberos 5 AS-REP etype 23 (AS-REP Roast)"; return ;;
         '$krb5pa$'*)       echo "7500|Kerberos 5 AS-REQ Pre-Auth etype 23"; return ;;
-        '$sntp-ms$'*)      echo "31300|MS-SNTP (Timeroast) -- crack with hashcat's --username flag, RID is embedded as the username field"; return ;;
+        *'$sntp-ms$'*)     echo "31300|MS-SNTP (Timeroast) -- crack with hashcat's --username flag, RID is embedded as the username field"; return ;;
         '$2a$'*|'$2b$'*|'$2y$'*) echo "3200|bcrypt"; return ;;
         '$1$'*)            echo '500|md5crypt ($1$, Unix)'; return ;;
         '$5$'*)            echo '7400|sha256crypt ($5$, Unix)'; return ;;

