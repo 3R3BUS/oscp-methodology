@@ -176,8 +176,9 @@ set up RBCD or Shadow Credentials yourself using a rogue machine account. Both e
 service ticket (RBCD) or a PKINIT-derived TGT/NT hash (Shadow Credentials) impersonating a privileged
 user on the target. Success is a ticket or NT hash for an account with rights on the box you need.
 See [`notes/ad-delegation-trust-bloodhound.md`](ad-delegation-trust-bloodhound.md) §2 ("Kerberos
-Delegation Abuse") for the constrained/unconstrained/RBCD worked commands, and §1's "ACL Abuse"
-section's "ReadGMSAPassword"/Shadow Credentials-adjacent entries for the write-access setup path.
+Delegation Abuse") for the constrained/unconstrained/RBCD worked commands, and the standalone "ACL
+Abuse — Exploiting BloodHound Edges" section's "ReadGMSAPassword"/Shadow Credentials-adjacent entries
+for the write-access setup path.
 
 ---
 

