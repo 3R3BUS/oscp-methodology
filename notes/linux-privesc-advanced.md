@@ -349,3 +349,52 @@ https://book.hacktricks.xyz/linux-hardening/privilege-escalation#path-abuses
 ---
 
 **General enumeration tools to run first in any engagement:** `linpeas.sh` (https://github.com/peass-ng/PEASS-ng), `pspy` (https://github.com/DominicBreuker/pspy), `linux-exploit-suggester` (https://github.com/mzet-/linux-exploit-suggester), and always cross-check specific binaries against **GTFOBins** (https://gtfobins.github.io) and the full **HackTricks Linux Privilege Escalation** page (https://book.hacktricks.xyz/linux-hardening/privilege-escalation) for the current, most exhaustive technique catalog.
+
+---
+
+## 8. Prebuilt Enumeration Scripts — Exact Usage
+
+### LinPEAS (PEASS-ng)
+```bash
+curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh -o linpeas.sh
+chmod +x linpeas.sh
+./linpeas.sh -a              # all checks, deep/slow
+./linpeas.sh -s               # superfast/stealth, skips time-consuming checks
+./linpeas.sh -a | tee linpeas_out.txt
+```
+**Note:** older LinPEAS versions had a built-in auto-exploit-suggestion feature — treat LinPEAS as an *enumeration-only* tool on the OSCP exam and verify current exam tool-allowance rules before relying on any auto-exploit behavior.
+
+### linux-smart-enumeration (lse.sh)
+Lighter, more curated alternative to LinPEAS — progressively surfaces findings by importance, less noisy.
+```bash
+curl -L https://github.com/diego-treitos/linux-smart-enumeration/releases/latest/download/lse.sh -o lse.sh && chmod +x lse.sh
+./lse.sh -l1 -i    # verbosity 1 (interesting), non-interactive
+./lse.sh -l2 -i    # verbosity 2 (everything)
+```
+Verbosity: `-l0` critical only (default), `-l1` interesting, `-l2` all. Section filters available: `usr, sud, fst, sys, sec, ret, net, srv, pro, sof, ctn, cve`.
+**Reference:** https://github.com/diego-treitos/linux-smart-enumeration
+
+### linuxprivchecker
+Older, largely-superseded Python script — still useful as a lightweight, dependency-light, easy-to-vet fallback.
+```bash
+wget https://raw.githubusercontent.com/sleventyeleven/linuxprivchecker/master/linuxprivchecker.py
+python linuxprivchecker.py -w -o linuxprivchecker.log   # -w writes log, -s skips slow searches
+```
+**Reference:** https://github.com/sleventyeleven/linuxprivchecker
+
+### pspy — no-root process/filesystem monitor
+Watches `/proc` and inotify events to catch short-lived processes, most commonly **cron jobs run as root** (captures the exact command line and arguments) — one of the most common Linux privesc vectors.
+```bash
+wget https://github.com/DominicBreuker/pspy/releases/latest/download/pspy64
+chmod +x pspy64
+./pspy64 -pf -i 1000    # -p print commands, -f print filesystem events, -i scan interval (ms)
+```
+**Reference:** https://github.com/DominicBreuker/pspy
+
+### Standard GTFOBins-driven privesc workflow
+1. Orient: `id`, `sudo -l`, `whoami`, `uname -a`, check `/etc/passwd`.
+2. **Check `sudo -l` first** — misconfigured sudo entries are the single most common Linux privesc path on OSCP-style boxes.
+3. Enumerate SUID/SGID + capabilities: `find / -perm -4000 -type f 2>/dev/null`, `find / -perm -2000 -type f 2>/dev/null`, `getcap -r / 2>/dev/null`.
+4. Cross-reference every binary found (sudo-runnable, SUID, or capability-holding) against **GTFOBins** (https://gtfobins.github.io) for a documented "Sudo"/"SUID"/"Capabilities" abuse function.
+5. Confirm and execute the documented technique for that binary (e.g. `sudo vim -c ':!/bin/sh'`).
+6. Fall back to broader enumeration (LinPEAS/lse.sh/pspy, cron, writable services, PATH hijacking) only if sudo/SUID/capabilities don't pan out — kernel exploits are used last since they're noisy and can crash the target.

