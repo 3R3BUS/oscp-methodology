@@ -25,6 +25,7 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`notes/windows-lateral-movement-persistence.md`](notes/windows-lateral-movement-persistence.md) ·
 [`notes/windows-privesc-scripts.md`](notes/windows-privesc-scripts.md) ·
 [`notes/linux-privesc-advanced.md`](notes/linux-privesc-advanced.md) ·
+[`notes/easy-lpe-cve-quickhits.md`](notes/easy-lpe-cve-quickhits.md) ·
 [`notes/buffer-overflow-legacy.md`](notes/buffer-overflow-legacy.md) ·
 [`notes/web-attack-techniques.md`](notes/web-attack-techniques.md) ·
 [`notes/web-core-vulnerabilities.md`](notes/web-core-vulnerabilities.md) ·
@@ -231,6 +232,11 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > **Deep-dive:** [`notes/windows-privesc-scripts.md`](notes/windows-privesc-scripts.md) covers scripted/manual
 > Windows privesc enumeration (winPEAS/PowerUp/Seatbelt flag reference plus manual registry/service/token checks)
 > and how to cross-check automated tool output before acting on it.
+>
+> **Deep-dive:** [`notes/easy-lpe-cve-quickhits.md`](notes/easy-lpe-cve-quickhits.md) covers the Windows half
+> of a curated known-CVE fast path for local privesc — PrintNightmare, HiveNightmare/SeriousSAM, and the
+> recurring `win32k.sys`/`afd.sys`/`clfs.sys`/`ntoskrnl.exe` kernel LPE chain from 2021 through 2026 — to
+> check against a fingerprinted build version before falling back to full manual enumeration.
 
 ## 8. Linux Privilege Escalation
 
@@ -246,6 +252,11 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > cron/PATH/wildcard injection, NFS `no_root_squash`, Docker/LXD group breakout, writable `/etc/passwd`,
 > the kernel-exploit lookup workflow, and `LD_PRELOAD`/library hijacking — with detection + exploitation
 > commands for each.
+>
+> **Deep-dive:** [`notes/easy-lpe-cve-quickhits.md`](notes/easy-lpe-cve-quickhits.md) covers the Linux half
+> of a curated known-CVE fast path for local privesc — Dirty COW, PwnKit, Dirty Pipe, Baron Samedit, Looney
+> Tunables, GameOver(lay), needrestart, sudo chroot/"chwoot", and more, one-command-or-one-tool PoCs only —
+> to check against a fingerprinted kernel/package version before falling back to full manual enumeration.
 
 ## 9. Buffer Overflow / Exploit Development
 
@@ -385,6 +396,12 @@ to **authorized** penetration testing education and OSCP exam preparation.
       chunking, `/dev/tcp`, PowerShell cradles) — done, see
       [`notes/file-transfer-matrix.md`](notes/file-transfer-matrix.md); reverse/bind shell payloads
       themselves are in [`CHEATSHEET.md`](CHEATSHEET.md) §5–6.
+- [x] Curated "easy" LPE CVE quick-reference — recent-ish, one-command-or-one-tool, broadly-applicable
+      Windows and Linux local privesc CVEs to check against a fingerprinted OS/kernel/package version
+      before falling back to full manual enumeration — done, see
+      [`notes/easy-lpe-cve-quickhits.md`](notes/easy-lpe-cve-quickhits.md) (14 Linux + 11 Windows entries,
+      each independently fact-checked against NVD/vendor advisories before inclusion, spanning
+      CVE-2016-5195/Dirty COW through CVE-2026-46333, disclosed May 2026).
 - [x] Build the full step-by-step **methodology document** (separate from this resource list) that
       sequences: recon → web → initial access → Windows/Linux privesc → AD enumeration → AD attack →
       lateral movement → reporting, using the flow captured in §15 and stitching together all the
