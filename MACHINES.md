@@ -7,7 +7,7 @@ A working list of HTB machines from TJnull's well-known OSCP-prep list (NetSecFo
 - Writeups: [0xdf hacks stuff](https://0xdf.gitlab.io/) — matched via the structured index at [momenbasel/htb-writeups](https://github.com/momenbasel/htb-writeups) (`0xdf-htb-machines.json`)
 - Videos: [ippsec](https://www.youtube.com/@ippsec) — matched via the official dataset at [IppSec/ippsec.github.io](https://github.com/IppSec/ippsec.github.io) (`dataset.json`, backing ippsec.rocks)
 
-**Coverage:** 107 machines total. 0xdf writeup found for 106/107 (only *Bust* has no confirmed writeup). ippsec video found for 100/107 — the 7 without one (*Bashed, Bust, Legacy, ServerMon* predecessor note below, *Cronos, SolidState, Object*) were confirmed absent from ippsec's own video index, not a search failure.
+**Coverage:** 107 machines total. 0xdf writeup found for 106/107 (only *Bust* has no confirmed writeup). ippsec video found for 101/107 — the 6 without one (*Bashed, Bust, Legacy, Cronos, SolidState, Object*) were confirmed absent from ippsec's own video index, not a search failure.
 
 ---
 

