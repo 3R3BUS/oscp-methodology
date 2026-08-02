@@ -7,7 +7,7 @@ A working list of HTB machines from TJnull's well-known OSCP-prep list (NetSecFo
 - Writeups: [0xdf hacks stuff](https://0xdf.gitlab.io/) — matched via the structured index at [momenbasel/htb-writeups](https://github.com/momenbasel/htb-writeups) (`0xdf-htb-machines.json`)
 - Videos: [ippsec](https://www.youtube.com/@ippsec) — matched via the official dataset at [IppSec/ippsec.github.io](https://github.com/IppSec/ippsec.github.io) (`dataset.json`, backing ippsec.rocks)
 
-**Coverage:** 108 machines total. 0xdf writeup found for 107/108 (only *Bust* has no confirmed writeup). ippsec video found for 101/108 — the 7 without one (*Bashed, Bust, Legacy, ServerMon* predecessor note below, *Cronos, SolidState, Object*) were confirmed absent from ippsec's own video index, not a search failure.
+**Coverage:** 107 machines total. 0xdf writeup found for 106/107 (only *Bust* has no confirmed writeup). ippsec video found for 101/107 — the 6 without one (*Bashed, Bust, Legacy, Cronos, SolidState, Object*) were confirmed absent from ippsec's own video index, not a search failure.
 
 ---
 
@@ -106,7 +106,7 @@ A working list of HTB machines from TJnull's well-known OSCP-prep list (NetSecFo
 | Bankrobber | Windows | [link](https://0xdf.gitlab.io/2020/03/07/htb-bankrobber.html) | [link](https://youtu.be/zYmA9ECuCio) |
 | Brainfuck | Linux | [link](https://0xdf.gitlab.io/2022/05/16/htb-brainfuck.html) | [link](https://youtu.be/o5x1yg3JnYI) |
 
-## More Challenging (33)
+## More Challenging (32)
 
 | Machine | OS | 0xdf Writeup | ippsec Video |
 |---|---|---|---|
@@ -127,7 +127,6 @@ A working list of HTB machines from TJnull's well-known OSCP-prep list (NetSecFo
 | Kotarak | Linux | [link](https://0xdf.gitlab.io/2021/05/19/htb-kotarak.html) | [link](https://youtu.be/38e-sxPWiuY) |
 | LaCasaDePapel | Linux | [link](https://0xdf.gitlab.io/2019/07/27/htb-lacasadepapel.html) | [link](https://youtu.be/OSRCEOQQJ4E) |
 | Lightweight | Linux | [link](https://0xdf.gitlab.io/2019/05/11/htb-lightweight.html) | [link](https://youtu.be/yQgtDoCDAYk) |
-| Mango | Linux | [link](https://0xdf.gitlab.io/2020/04/18/htb-mango.html) | [link](https://youtu.be/NO_lsfhQK_s) |
 | Monitors | Linux | [link](https://0xdf.gitlab.io/2021/10/09/htb-monitors.html) | [link](https://youtu.be/-loZwD39ifc) |
 | Monteverde | Windows | [link](https://0xdf.gitlab.io/2020/06/13/htb-monteverde.html) | [link](https://youtu.be/HTJjPZvOtJ4) |
 | Nest | Windows | [link](https://0xdf.gitlab.io/2020/06/06/htb-nest.html) | [link](https://youtu.be/tDbVw6uGx8g) |
@@ -147,4 +146,6 @@ A working list of HTB machines from TJnull's well-known OSCP-prep list (NetSecFo
 † *ServerMon* is listed on HackTheBox itself as **ServMon** — links above point to the ServMon writeup/video.
 
 
-**Total machines: 108**
+**Total machines: 107**
+
+*Note: "Mango" appeared in both the Medium and More Challenging tiers in earlier drafts (identical writeup/video links) — a duplicate listing, not two distinct machines. It is kept in the Medium table above; the More Challenging duplicate was removed and the totals corrected accordingly (2026-08-02).*

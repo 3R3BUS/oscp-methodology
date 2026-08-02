@@ -327,6 +327,33 @@ gcc -shared -fPIC -o /path/writable/missing_lib.so.6 libshared.c
 https://book.hacktricks.xyz/linux-hardening/privilege-escalation#ld_preload-and-ld_library_path
 https://book.hacktricks.xyz/linux-hardening/privilege-escalation#path-abuses
 
+### 7d. Sudo version exploits (CVE-based, no valid sudo rule needed)
+
+**Explanation:** Distinct from `sudo -l` misconfiguration abuse — a vulnerable sudo *build itself* can grant root regardless of what rules are configured. Always check the version alongside kernel version during enumeration.
+
+**Detection:**
+```bash
+sudo -V | head -n1     # e.g. "Sudo version 1.9.5p1"
+```
+
+**Cross-reference against known CVEs:**
+| CVE | Affected | Notes |
+|---|---|---|
+| CVE-2021-3156 ("Baron Samedit") | sudo < 1.9.5p2 | Heap-based buffer overflow via crafted argv[0]/command-line args; no valid `sudo -l` entry needed, just local sudo binary access |
+| CVE-2019-18634 | sudo < 1.8.26 with `pwfeedback` enabled | Stack buffer overflow when typing password with `pwfeedback` on (check `sudo -l` or `/etc/sudoers` for `pwfeedback`) |
+
+**Exploitation (CVE-2021-3156 workflow):**
+```bash
+# transfer a vetted PoC (e.g. blasty/CVE-2021-3156 or worawit/CVE-2021-3156) to target
+gcc exploit.c -o exploit    # or run the provided PoC script per its instructions
+./exploit
+# yields root shell if version is vulnerable and build is exploitable (some distro patches vary)
+```
+
+**Reference:** https://nvd.nist.gov/vuln/detail/CVE-2021-3156
+https://github.com/blasty/CVE-2021-3156
+https://book.hacktricks.xyz/linux-hardening/privilege-escalation#sudo-version
+
 ---
 
 ## Summary Table
@@ -345,6 +372,7 @@ https://book.hacktricks.xyz/linux-hardening/privilege-escalation#path-abuses
 | PATH hijack | `strings`/`ltrace` on SUID bin | hacktricks.xyz |
 | LD_PRELOAD | `sudo -l` (env_keep) | gtfobins.github.io |
 | Library hijack | `strace -f -e trace=open` | hacktricks.xyz |
+| Sudo version CVE | `sudo -V` | nvd.nist.gov (CVE-2021-3156) |
 
 ---
 
