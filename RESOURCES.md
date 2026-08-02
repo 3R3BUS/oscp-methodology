@@ -17,9 +17,11 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`EXAM-TIPS.md`](EXAM-TIPS.md) (proctoring, time budgeting, documentation rules) ·
 [`MACHINES.md`](MACHINES.md) (this repo's own curated list of 107 OSCP-like HTB machines, matched to
 0xdf writeups and ippsec videos) ·
+[`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md) ·
 [`notes/adcs-certipy-cheatsheet.md`](notes/adcs-certipy-cheatsheet.md) ·
 [`notes/ad-coercion-and-relay.md`](notes/ad-coercion-and-relay.md) ·
 [`notes/ad-delegation-trust-bloodhound.md`](notes/ad-delegation-trust-bloodhound.md) ·
+[`notes/ad-domain-privesc-cves.md`](notes/ad-domain-privesc-cves.md) ·
 [`notes/windows-lateral-movement-persistence.md`](notes/windows-lateral-movement-persistence.md) ·
 [`notes/windows-privesc-scripts.md`](notes/windows-privesc-scripts.md) ·
 [`notes/linux-privesc-advanced.md`](notes/linux-privesc-advanced.md) ·
@@ -32,6 +34,13 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`notes/password-attacks-advanced.md`](notes/password-attacks-advanced.md) ·
 [`notes/pivoting-tunneling.md`](notes/pivoting-tunneling.md) ·
 [`notes/file-transfer-matrix.md`](notes/file-transfer-matrix.md)
+
+> **Start here for the AD set:** [`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md)
+> is the sequenced, numbered walkthrough of the whole AD attack chain (assumed-breach credential →
+> BloodHound → domain compromise) — everything else AD-related in this repo (delegation/trust/ACL abuse,
+> ADCS, coercion/relay, password attacks, credential harvesting, lateral movement, domain-privesc CVEs)
+> is the command reference it links into at each stage. Read that file top to bottom once, then use it
+> as an exam-day checklist; go to the individual notes files for actual syntax.
 
 ---
 
@@ -366,18 +375,30 @@ to **authorized** penetration testing education and OSCP exam preparation.
       chunking, `/dev/tcp`, PowerShell cradles) — done, see
       [`notes/file-transfer-matrix.md`](notes/file-transfer-matrix.md); reverse/bind shell payloads
       themselves are in [`CHEATSHEET.md`](CHEATSHEET.md) §5–6.
+- [x] Build the full step-by-step **methodology document** (separate from this resource list) that
+      sequences: recon → web → initial access → Windows/Linux privesc → AD enumeration → AD attack →
+      lateral movement → reporting, using the flow captured in §15 and stitching together all the
+      companion files above into one linear walkthrough — done, see
+      [`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md). Scoped to the AD set
+      specifically (the exam's assumed-breach-credential → DC+2-client-machine chain, worth 40 of the
+      100 points) rather than the full recon→web→standalone-privesc surface, since that's where a single
+      linear walkthrough adds the most value beyond the per-technique deep-dive files; it sequences and
+      links every AD companion file above (BloodHound, ACL abuse, delegation/RBCD, coercion/relay, ADCS,
+      domain-privesc CVEs, credential harvesting, lateral movement) into one numbered, decision-driven
+      path plus a quick-reference keyed off current access level.
+- [x] Consider a short ADCS ESC9–ESC16 addendum (current cheat sheet covers ESC1–ESC8 in depth; ESC9/10
+      security-extension bypass and ESC13/15 issuance-policy abuse are newer and increasingly tested) —
+      done, see [`notes/adcs-certipy-cheatsheet.md`](notes/adcs-certipy-cheatsheet.md) §6 ("ESC9–ESC16
+      Reference Addendum"), covering ESC9 (no security extension), ESC10 (weak certificate mapping),
+      ESC11 (NTLM relay to ICPR RPC), ESC12 (CA private key access), ESC13 (issuance policy → privileged
+      group), ESC14 (explicit certificate mapping), ESC15/EKUwu (CVE-2024-49019), and ESC16 (security
+      extension disabled CA-wide).
 
 **Still open:**
 
-- [ ] Build the full step-by-step **methodology document** (separate from this resource list) that
-      sequences: recon → web → initial access → Windows/Linux privesc → AD enumeration → AD attack →
-      lateral movement → reporting, using the flow captured in §15 and stitching together all the
-      companion files above into one linear walkthrough.
 - [ ] Upstream the AD coercion/relay content gap identified above into `security-practitioners-guide`
       (`content/offsec/ptint/` or a new `content/resources/` entry), since it's a real gap in that repo,
       not just this one.
 - [ ] Re-verify the TJnull Google Sheet and NetSecFocus links with a direct (non-automated) browser check
       before treating them as stable long-term citations — verification this pass was search-snippet-only
       due to outbound network policy blocking docs.google.com/netsecfocus.com/help.offsec.com directly.
-- [ ] Consider a short ADCS ESC9–ESC16 addendum (current cheat sheet covers ESC1–ESC8 in depth; ESC9/10
-      security-extension bypass and ESC13/15 issuance-policy abuse are newer and increasingly tested).
