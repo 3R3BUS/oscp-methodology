@@ -15,13 +15,22 @@ to **authorized** penetration testing education and OSCP exam preparation.
 **Companion deep-dive files** (added in a second research pass, same repo):
 [`CHEATSHEET.md`](CHEATSHEET.md) (command/flags quick reference) ·
 [`EXAM-TIPS.md`](EXAM-TIPS.md) (proctoring, time budgeting, documentation rules) ·
+[`MACHINES.md`](MACHINES.md) (this repo's own curated list of 107 OSCP-like HTB machines, matched to
+0xdf writeups and ippsec videos) ·
 [`notes/adcs-certipy-cheatsheet.md`](notes/adcs-certipy-cheatsheet.md) ·
 [`notes/ad-coercion-and-relay.md`](notes/ad-coercion-and-relay.md) ·
+[`notes/ad-delegation-trust-bloodhound.md`](notes/ad-delegation-trust-bloodhound.md) ·
 [`notes/windows-lateral-movement-persistence.md`](notes/windows-lateral-movement-persistence.md) ·
+[`notes/windows-privesc-scripts.md`](notes/windows-privesc-scripts.md) ·
 [`notes/linux-privesc-advanced.md`](notes/linux-privesc-advanced.md) ·
+[`notes/buffer-overflow-legacy.md`](notes/buffer-overflow-legacy.md) ·
 [`notes/web-attack-techniques.md`](notes/web-attack-techniques.md) ·
+[`notes/web-core-vulnerabilities.md`](notes/web-core-vulnerabilities.md) ·
 [`notes/service-enumeration-comprehensive.md`](notes/service-enumeration-comprehensive.md) ·
+[`notes/enum-automation-frameworks.md`](notes/enum-automation-frameworks.md) ·
 [`notes/credentials-harvesting-post-exploitation.md`](notes/credentials-harvesting-post-exploitation.md) ·
+[`notes/password-attacks-advanced.md`](notes/password-attacks-advanced.md) ·
+[`notes/pivoting-tunneling.md`](notes/pivoting-tunneling.md) ·
 [`notes/file-transfer-matrix.md`](notes/file-transfer-matrix.md)
 
 ---
@@ -42,17 +51,26 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | OffSec Official Discord | https://discord.com/invite/offsec | ~95k-member, staff-monitored community/help server. |
 | OSCP Certification Preparation Guide | https://www.offsec.com/blog/offsec-certification-preparation-guide/ | Official study-planning advice blog post. |
 
-### 1.1 Current Exam Structure (verified, 2023+ format)
+### 1.1 Current Exam Structure (verified, post-Nov-1-2024 restructure)
+
+> **Authoritative source:** [`EXAM-TIPS.md`](EXAM-TIPS.md) §2 and §5 — this section is a short summary;
+> defer to that file (and the live OffSec Exam Guide) for exact current point-per-stage wording.
 
 - **Total:** 100 points; **70 required to pass**. Exam window: **23 hours 45 minutes** + 24h to submit the report.
-- **Active Directory set — 40 points:** one DC + 2 client machines, chained via a provided low-privileged
-  breach credential. Full points require Domain Admin / DC compromise.
+- **Active Directory set — 40 points:** "assumed compromise" — one DC + 2 client machines, chained via a
+  provided low-privileged breach credential. As of the **November 1, 2024 restructure**, the AD set awards
+  **partial credit per stage of the chain** (approx. 10/10/20 split across the chain per secondary sources)
+  rather than requiring full Domain Admin / DC compromise for any points — this reverses the older
+  all-or-nothing model that earlier guides (including earlier drafts of this file) described.
 - **3 standalone machines — 20 points each** (10 for a low-privilege/local.txt shell, 10 for
   root/system/proof.txt).
-- **10 bonus points** for completing ≥80% of course exercises **and** submitting 30 proof.txt
-  values from Challenge Labs during the course.
+- **Bonus points: removed.** The old +10 bonus points for ≥80% course-exercise completion and 30
+  proof.txt submissions from Challenge Labs were eliminated in the Nov 1, 2024 restructure. The 70/100
+  threshold must now be cleared purely from exam-day performance.
 - **Buffer overflow is no longer a scored exam objective** (removed in the 2023 PEN-200 update —
   see §9). It's still taught in the course for foundational skill-building.
+- **OSCP+ credential:** passing now issues both the lifetime **OSCP** certification and a separate
+  **OSCP+** designation that expires 3 years from issuance — see [`EXAM-TIPS.md`](EXAM-TIPS.md) §2.
 
 ---
 
@@ -79,6 +97,10 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | TJnull list sorted by difficulty | https://github.com/Shellshock9001/Tjs-Nulls-OSCP-list-in-order-from-easy-medium-hard-insane-more-challenging-and-alphabetical | Reorganizes TJnull's list by difficulty and alphabetically. |
 | NetSecFocus | https://netsec-focus.github.io/ | Origin of the "Trophy Room" list culture. **Verified:** NetSecFocus's own Mattermost server has been down since ~late 2021 with no officially-announced replacement platform — treat "still down, no official successor" as current best answer, not a certainty (site itself was unreachable during verification). |
 
+> **This repo's own curated list:** [`MACHINES.md`](MACHINES.md) — 107 HTB machines pulled from TJnull's
+> list, grouped by community-voted difficulty (Easy/Medium/Hard/Insane/More Challenging), each matched
+> against a 0xdf writeup and an ippsec video where one exists.
+
 ## 4. Methodology & Cheat-Sheet References
 
 | Resource | URL | Notes |
@@ -101,6 +123,11 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > **Deep-dive:** [`notes/web-attack-techniques.md`](notes/web-attack-techniques.md) covers file-upload bypass
 > (extension/content-type/magic-byte/polyglot), insecure deserialization basics (PHP/Java/Python), WordPress
 > enumeration/exploitation via wpscan, and a generic CMS/framework fingerprinting workflow.
+>
+> **Deep-dive:** [`notes/web-core-vulnerabilities.md`](notes/web-core-vulnerabilities.md) covers manual
+> (pre-sqlmap) SQL injection (UNION/error/blind-boolean/blind-time-based), XSS (reflected/stored/DOM +
+> cookie theft), LFI/RFI (path traversal, PHP wrapper abuse, log/session poisoning to RCE), OS command
+> injection (detection + filter bypass), and SSRF/XXE primers.
 
 ## 5. Recon & External Enumeration
 
@@ -115,6 +142,10 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | Gobuster | https://github.com/OJ/gobuster | Dir/DNS/vhost brute-forcing. |
 | OSINT Framework | https://osintframework.com/ | Categorized index of OSINT tools/techniques for external recon. |
 | Michael Bazzell — OSINT Techniques | https://inteltechniques.com/book1.html | Authoritative OSINT practitioner reference (digital footprint, footprinting workflow). |
+
+> **Deep-dive:** [`notes/enum-automation-frameworks.md`](notes/enum-automation-frameworks.md) covers
+> automated enumeration framework selection/usage (AutoRecon, Legion, reconftw-style pipelines) and how to
+> layer them with manual verification rather than trusting output blindly.
 
 ## 6. Active Directory
 
@@ -165,6 +196,9 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > (confirmed gap in `security-practitioners-guide` — no dedicated entry exists there yet).
 > [`notes/windows-lateral-movement-persistence.md`](notes/windows-lateral-movement-persistence.md) — DCOM/WMI/schtasks/PsExec
 > lateral movement plus AdminSDHolder/DCShadow/Skeleton Key persistence at reference level.
+> [`notes/ad-delegation-trust-bloodhound.md`](notes/ad-delegation-trust-bloodhound.md) — unconstrained/constrained/RBCD
+> delegation abuse paths, cross-forest/domain trust attacks, and BloodHound collection/query workflow
+> (SharpHound flags, common Cypher queries for shortest-path-to-DA).
 
 ## 7. Windows Privilege Escalation
 
@@ -180,6 +214,10 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | MITRE ATT&CK — SMB Admin Shares (T1021.002) | https://attack.mitre.org/techniques/T1021/002/ | Lateral movement via C$/ADMIN$/IPC$ + PsExec pattern. |
 | MITRE ATT&CK — WinRM (T1021.006) | https://attack.mitre.org/techniques/T1021/006/ | PowerShell remoting / evil-winrm lateral movement. |
 | MITRE ATT&CK — WMI (T1047) | https://attack.mitre.org/techniques/T1047/ | WMI-based remote execution/lateral movement. |
+
+> **Deep-dive:** [`notes/windows-privesc-scripts.md`](notes/windows-privesc-scripts.md) covers scripted/manual
+> Windows privesc enumeration (winPEAS/PowerUp/Seatbelt flag reference plus manual registry/service/token checks)
+> and how to cross-check automated tool output before acting on it.
 
 ## 8. Linux Privilege Escalation
 
@@ -209,6 +247,10 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | pwntools docs | https://docs.pwntools.com/en/stable/ | Python exploit-dev framework — ELF parsing, ROP, shellcraft, `cyclic` pattern offset-finding. |
 | msfvenom | (part of Metasploit Framework) | Shellcode generation with bad-char exclusion (`-b`) and encoders. |
 
+> **Deep-dive:** [`notes/buffer-overflow-legacy.md`](notes/buffer-overflow-legacy.md) — worked legacy
+> stack-overflow methodology notes (fuzz → offset → bad-char → JMP ESP → shellcode), kept for reference-level
+> exploit-dev familiarity even though BOF is no longer scored on the exam.
+
 ## 10. Password Attacks & Cracking
 
 | Tool | URL | Purpose |
@@ -221,6 +263,10 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | Responder | https://github.com/lgandx/Responder | LLMNR/NBT-NS/mDNS poisoning for hash capture. |
 | Crunch | (Kali default) | Pattern-based wordlist generation. |
 
+> **Deep-dive:** [`notes/password-attacks-advanced.md`](notes/password-attacks-advanced.md) covers password
+> spraying strategy/lockout-avoidance, custom mangling-rule authoring, and NTLM/Kerberos hash-type-specific
+> cracking workflow beyond the basic hashcat/John invocations above.
+
 ## 11. Pivoting & Tunneling
 
 | Tool | URL | Purpose |
@@ -231,6 +277,10 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | chisel | https://github.com/jpillora/chisel | HTTP tunnel with SOCKS5 support, useful where only HTTP egress exists. |
 | proxychains | (Kali default) | SOCKS5-wrap arbitrary tools (nmap, BloodHound, Impacket) through a pivot. |
 | Metasploit routing/portfwd | https://docs.metasploit.com/ | `route add` + `auxiliary/server/socks_proxy`, `autoroute`, `portfwd`. |
+
+> **Deep-dive:** [`notes/pivoting-tunneling.md`](notes/pivoting-tunneling.md) covers worked multi-hop
+> pivot chains (dual-pivot ligolo-ng/chisel setups, SSH -R/-L/-D combinations, proxychains config gotchas)
+> beyond the single-tool summaries in the table above.
 
 ## 12. Reporting & Note-Taking Tools
 
@@ -304,6 +354,9 @@ to **authorized** penetration testing education and OSCP exam preparation.
       LD_PRELOAD) — done, see [`notes/linux-privesc-advanced.md`](notes/linux-privesc-advanced.md).
 - [x] Deeper web attack techniques (upload bypass, deserialization, WordPress, CMS fingerprinting) — done,
       see [`notes/web-attack-techniques.md`](notes/web-attack-techniques.md).
+- [x] Core manual web-vulnerability methodology (SQLi, XSS, LFI/RFI, command injection, SSRF, XXE) — this
+      was a real gap (only sqlmap automation and incidental mentions existed; no worked manual technique) —
+      done, see [`notes/web-core-vulnerabilities.md`](notes/web-core-vulnerabilities.md).
 - [x] Per-service manual enumeration reference (FTP, SMB/NetBIOS, MSRPC, NFS, LDAP, SMTP, SNMP incl.
       v3, DNS, RDP, WinRM, SSH, and MySQL/MSSQL/Oracle/PostgreSQL/Redis) — done, see
       [`notes/service-enumeration-comprehensive.md`](notes/service-enumeration-comprehensive.md).

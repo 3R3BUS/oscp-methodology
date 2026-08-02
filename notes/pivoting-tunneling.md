@@ -82,6 +82,24 @@ proxychains4 smbclient -L //10.0.2.5/
 Pairs with SSH dynamic forwarding: `ssh -D 1080 -f -C -q -N user@pivot-host`.
 **Reference:** https://github.com/rofl0r/proxychains-ng
 
+## Native SSH local/remote forwarding — the fundamental Linux pivoting primitive
+
+Requires only a standard SSH login on a Linux pivot box; no extra binaries needed.
+```bash
+# Local forward — reach a service on the far side of the pivot as if it were on localhost
+ssh -L 3306:127.0.0.1:3306 user@pivot-host
+# now 127.0.0.1:3306 on the attacker box reaches MySQL on pivot-host
+
+# Remote forward — expose a local (attacker-side) service back through the pivot
+ssh -R 8080:127.0.0.1:80 user@attacker-ip
+# now 127.0.0.1:8080 on attacker-ip reaches port 80 on the box running this command
+
+# Background, no shell, keep-alive (common for a persistent tunnel)
+ssh -f -N -L 3306:127.0.0.1:3306 user@pivot-host
+```
+`-D` (see proxychains section above) is the dynamic/SOCKS variant of the same mechanism.
+**Reference:** https://man.openbsd.org/ssh#L
+
 ## plink.exe — SSH tunneling from a compromised Windows host
 
 Signed PuTTY CLI client, widely AV-allowed. Only acts as SSH client — forwards originate from the Windows box back to an SSH server you control.
@@ -106,9 +124,9 @@ netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=8888
 Requires the `iphlpsvc` (IP Helper) service running; rules persist in the registry across reboots.
 **Reference:** https://learn.microsoft.com/en-us/windows-server/networking/technologies/netsh/netsh-interface-portproxy
 
-## Metasploit/Meterpreter — autoroute + socks_proxy + portfwd
+## Metasploit/Meterpreter — autoroute + socks_proxy + portfwd (reference only — BANNED on the OSCP exam)
 
-Only relevant once already inside a Meterpreter session (and note the OSCP exam's single-target Metasploit restriction — see EXAM-TIPS.md).
+**Do not use this on the OSCP exam.** The exam rules permit Meterpreter/Metasploit against only one single target machine for the entire exam, and explicitly forbid using it to route, pivot, or forward traffic toward any additional machine. `post/multi/manage/autoroute`, `auxiliary/server/socks_proxy`, and `portfwd` all exist specifically to route/forward traffic through a Meterpreter session to other hosts — that is the exact pivoting behavior the exam disallows, not merely a "single-target" caveat. Treat the commands below as reference material for non-exam engagements (labs, CTFs, real-world pentests) only; on the OSCP exam use ligolo-ng/chisel/sshuttle/plink/native SSH instead — see EXAM-TIPS.md.
 ```
 use post/multi/manage/autoroute
 set SESSION <id>

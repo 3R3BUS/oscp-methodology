@@ -20,6 +20,25 @@
 - A **"Pause Webcam"** control lets you request the proctor pause webcam viewing for a break (short or long); the VPN connection typically stays live so background processes can keep running.
 - If you need to leave your room/change location, you must tell the proctor first — the exam VPN gets paused and a fresh room scan is done before it's reactivated.
 
+**Technical outages / connectivity failures (VPN drop, proctoring-client crash, power loss):**
+- Report the outage to the proctor/support **immediately** through whatever channel is still available —
+  in-client chat with the proctor if the proctoring tool is still up, or OffSec's live support chat /
+  support ticket portal if the proctoring tool itself has crashed or you've lost all connectivity.
+- If your **internet or power drops entirely**, reconnect as soon as possible and contact the proctor/support
+  the moment you're back online — don't wait until you've resumed working to report it; the timestamp of
+  your report is part of how OffSec evaluates the outage.
+- **Document the outage yourself** as you would any other exam evidence: note the approximate time it started
+  and ended, what happened, and any error messages/screenshots you can capture once you're back — this
+  supports your case if you later request compensated time.
+- OffSec's stance (per the Proctoring Tool Manual and support articles) is that **time-loss compensation for
+  verified technical outages is handled case-by-case through support, not automatically granted** — there is
+  no guaranteed makeup-time policy the way there is for planned "Pause Webcam" breaks. Open a support ticket
+  during or immediately after the exam window describing the outage; don't assume lost time will be added
+  back unless support confirms it.
+- This is distinct from a **planned location change** (§ above), which pauses the VPN with prior notice — an
+  unplanned outage is, by definition, not something you can notify the proctor about in advance, so report-after
+  is the correct flow, not a violation of conduct rules.
+
 **Tooling/conduct rules:**
 - AI chatbots and LLM assistants (ChatGPT, Claude, Gemini, Copilot, DeepSeek, OffSec's own KAI, etc.) are **strictly prohibited** on OSCP — using one is treated as third-party assistance/exam-info sharing and can lead to a **permanent ban**, not just a fail. (OSEE/OSAI are the only OffSec exams that currently permit AI use.)
 - Commercial/automated mass-exploitation tools and vulnerability scanners are restricted per the exam rules.
@@ -90,6 +109,7 @@ These are treated by virtually every source as **make-or-break** — more candid
 - Always read proof.txt/local.txt via an **interactive shell on the target itself** and pair the screenshot with IP-address verification output.
 - Grab and document low-priv access on a standalone immediately — it locks in 10 points even if privesc later stalls.
 - Use the proctor's "Pause Webcam" feature for planned breaks (food/sleep) instead of disconnecting, and keep the VPN/proctoring session alive through them.
+- If the VPN, proctoring client, or your power/internet drops unexpectedly, report it to the proctor/support immediately once you're back online and open a support ticket describing the outage — don't assume lost time is compensated automatically.
 - Plan a real sleep break once most boxes are down, to protect judgment during exploitation and clarity during report writing.
 - Leave all terminals/browser tabs open until the report is fully submitted — gaps in captured evidence can sometimes be filled from on-screen scrollback during the 24-hour write-up window.
 - Keep AI chatbots, KAI, ChatGPT, Claude, Gemini, Copilot, etc. completely away from the exam machine/session — treat this as a bright line, not a gray area.

