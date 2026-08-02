@@ -1,5 +1,9 @@
 # OSCP File Transfer Technique Matrix (2026) — Research Report
 
+*Scope note: this file covers file transfer / tool-staging only. For reverse/bind shell
+payload generation and one-liners, see [`CHEATSHEET.md` §5–6](../CHEATSHEET.md#5-msfvenom-payload-generation)
+(msfvenom payloads, netcat/Python/PHP reverse-shell one-liners, shell stabilization).*
+
 ## Topic
 File transfer / tool-staging techniques for OSCP-style engagements: moving payloads, loot, and post-exploitation tooling between an attacker box (typically Kali Linux, occasionally Windows) and Windows/Linux targets, including scenarios with no direct network egress from the target.
 

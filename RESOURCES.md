@@ -19,7 +19,10 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`notes/ad-coercion-and-relay.md`](notes/ad-coercion-and-relay.md) ·
 [`notes/windows-lateral-movement-persistence.md`](notes/windows-lateral-movement-persistence.md) ·
 [`notes/linux-privesc-advanced.md`](notes/linux-privesc-advanced.md) ·
-[`notes/web-attack-techniques.md`](notes/web-attack-techniques.md)
+[`notes/web-attack-techniques.md`](notes/web-attack-techniques.md) ·
+[`notes/service-enumeration-comprehensive.md`](notes/service-enumeration-comprehensive.md) ·
+[`notes/credentials-harvesting-post-exploitation.md`](notes/credentials-harvesting-post-exploitation.md) ·
+[`notes/file-transfer-matrix.md`](notes/file-transfer-matrix.md)
 
 ---
 
@@ -301,6 +304,15 @@ to **authorized** penetration testing education and OSCP exam preparation.
       LD_PRELOAD) — done, see [`notes/linux-privesc-advanced.md`](notes/linux-privesc-advanced.md).
 - [x] Deeper web attack techniques (upload bypass, deserialization, WordPress, CMS fingerprinting) — done,
       see [`notes/web-attack-techniques.md`](notes/web-attack-techniques.md).
+- [x] Per-service manual enumeration reference (FTP, SMB/NetBIOS, MSRPC, NFS, LDAP, SMTP, SNMP incl.
+      v3, DNS, RDP, WinRM, SSH, and MySQL/MSSQL/Oracle/PostgreSQL/Redis) — done, see
+      [`notes/service-enumeration-comprehensive.md`](notes/service-enumeration-comprehensive.md).
+- [x] Credential-harvesting / post-exploitation loot reference, Linux and Windows — done, see
+      [`notes/credentials-harvesting-post-exploitation.md`](notes/credentials-harvesting-post-exploitation.md).
+- [x] File transfer / tool-staging technique matrix (netcat, SMB, HTTP(S), SCP, base64/`certutil`
+      chunking, `/dev/tcp`, PowerShell cradles) — done, see
+      [`notes/file-transfer-matrix.md`](notes/file-transfer-matrix.md); reverse/bind shell payloads
+      themselves are in [`CHEATSHEET.md`](CHEATSHEET.md) §5–6.
 
 **Still open:**
 

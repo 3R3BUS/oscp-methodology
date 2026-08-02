@@ -1,8 +1,15 @@
-# OSCP-Style FTP & SMB/NetBIOS Manual Enumeration — Research Findings
+# OSCP Service Enumeration — Comprehensive Reference
 
-Compiled from HackTricks, the NetExec/nxc official wiki source, enum4linux/enum4linux-ng, smbmap, and the nmap NSE script source tree (verified against source code, not just secondary blog posts, where possible).
+Consolidated per-service manual enumeration reference covering FTP, SMB/NetBIOS, MSRPC, NFS,
+LDAP, SMTP, SNMP, DNS, RDP, WinRM, SSH, and the major database engines (MySQL/MariaDB, MSSQL,
+Oracle, PostgreSQL, Redis). Compiled across several focused research passes (each section notes
+its own sourcing); jump to the relevant `##` section below for a given protocol.
 
 ---
+
+## FTP & SMB/NetBIOS Manual Enumeration
+
+Compiled from HackTricks, the NetExec/nxc official wiki source, enum4linux/enum4linux-ng, smbmap, and the nmap NSE script source tree (verified against source code, not just secondary blog posts, where possible).
 
 ## Topic 1: FTP Enumeration (Port 21)
 
@@ -513,7 +520,7 @@ Source: https://raw.githubusercontent.com/nmap/nmap/master/scripts/script.db and
 
 **File locations note:** No files were written for this research — everything above is the direct deliverable per your no-report-file instruction. If you'd like this converted into a polished, printable study-guide artifact (HTML/PDF) or a `.md` file in your OSCP repo, let me know and I'll produce it.
 ---
-# OSCP Manual Enumeration Research: RPC, NFS, and LDAP
+## RPC, NFS, and LDAP Enumeration
 
 ## Topic
 Manual enumeration techniques for RPC (portmapper/MSRPC), NFS, and LDAP services in OSCP-style penetration testing engagements, covering `rpcinfo`/`rpcclient`, `showmount`/NFS mounting (including techniques beyond `no_root_squash`), and LDAP anonymous bind enumeration via `ldapsearch`, `windapsearch`, and `ldapdomaindump`.
@@ -802,7 +809,7 @@ Several commonly cited primary sources (HackTricks `book.hacktricks.xyz`/`hacktr
 ---
 I'll now provide the structured markdown report directly, since this is a research task (not a file-authoring task the parent needs saved as an artifact). Findings below.
 
-# OSCP-Style Manual Enumeration & Interaction: RDP, WinRM, SSH
+## RDP, WinRM, SSH — Manual Enumeration & Interaction
 
 ## Topic
 Manual (non-Metasploit) enumeration and interactive-access commands for the three most common OSCP remote-access services — RDP (3389), WinRM (5985/5986), and SSH (22) — covering connection syntax, authentication edge cases (NLA/CredSSP, pass-the-hash), the `evil-winrm` and `netexec` (nxc, the CrackMapExec successor) tooling, and SSH banner grabbing / key-abuse patterns.
@@ -1137,7 +1144,7 @@ Source: https://gist.github.com/strikoder/99635df00444bbf5fc90ca83ec8051a0
 - https://www.pentestpartners.com/security-blog/how-to-abuse-ssh-keys/
 - https://github.com/kaio6fellipe/ssh-enum
 ---
-# SMTP & SNMP Manual Enumeration — OSCP Study Reference (2026)
+## SMTP & SNMP Manual Enumeration
 
 ---
 
@@ -1510,7 +1517,7 @@ Source: [Net-SNMP snmpcmd manpage — SNMPv3 options](http://www.net-snmp.org/do
 
 **Notes for the repo maintainer**: This was compiled via live web research (Aug 2026) rather than from memory alone, cross-checking tool READMEs, Nmap's own NSE docs, and multiple independent OSCP-notes/cheat-sheet sources for command syntax agreement. All commands above are standard, publicly documented enumeration techniques (no exploit code); the SMTP relay test and SNMP write-access flag (`-w`) are the only "active" checks and should only be run against systems you're authorized to test. The Windows LAN-Manager-MIB OIDs (`1.3.6.1.4.1.77.*`) apply only to legacy/NT4-era SNMP agents still occasionally seen on OSCP-style lab boxes — modern Windows Server SNMP feature does not expose this branch by default.
 ---
-# DNS Enumeration for OSCP-Style Engagements (2026)
+## DNS Enumeration
 
 ## Topic
 Manual and semi-automated DNS enumeration techniques used during the reconnaissance phase of OSCP-style penetration tests: zone transfer attempts, `dnsrecon`/`dnsenum`/`fierce` usage, subdomain brute forcing, reverse DNS (PTR) lookups, and DNS-based Active Directory domain-controller discovery via SRV records.
@@ -1814,7 +1821,7 @@ dig any corp.local @<dc-ip>
 
 **Note on scope of this research:** This report only compiles publicly documented, standard DNS reconnaissance commands and techniques as taught in OSCP-aligned study material (dig/host/dnsrecon/dnsenum/fierce/gobuster syntax and AD SRV-record queries). No exploitation, credential collection, or targeting of any real, non-consented infrastructure was performed — all example domains (`example.com`, `zonetransfer.me`, `corp.local`) are placeholders or purpose-built public training targets.
 ---
-# Database Enumeration & Exploitation — OSCP-Style Command Reference (2026)
+## Database Enumeration & Exploitation (MySQL/MSSQL/Oracle/PostgreSQL/Redis)
 
 Research compiled from HackTricks, PayloadsAllTheThings, Impacket source, ODAT wiki, Hacking Articles, and community OSCP cheat sheets. All commands below are attacker-side, run against a target you are authorized to test.
 
