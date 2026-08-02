@@ -44,7 +44,10 @@ for tool in whatweb feroxbuster ffuf curl; do
 done
 
 OUT="./web-recon-out/${TARGET}"
-mkdir -p "$OUT"
+if ! mkdir -p "$OUT"; then
+    echo "[!] Failed to create output directory: $OUT" >&2
+    exit 1
+fi
 echo "[*] Output directory: $OUT"
 
 # --- whatweb: tech fingerprint (always) ---

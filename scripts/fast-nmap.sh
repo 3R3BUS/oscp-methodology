@@ -19,7 +19,10 @@ if ! command -v nmap >/dev/null 2>&1; then
 fi
 
 OUT="./fast-nmap-out/${TARGET}"
-mkdir -p "$OUT"
+if ! mkdir -p "$OUT"; then
+    echo "[!] Failed to create output directory: $OUT" >&2
+    exit 1
+fi
 echo "[*] Output directory: $OUT"
 
 SUDO=""
@@ -46,7 +49,7 @@ if [[ $TCP_RC -ne 0 ]]; then
     echo "[!] Full TCP sweep exited non-zero ($TCP_RC) -- check $OUT/tcp-all.log" >&2
 fi
 
-TCP_PORTS="$(grep -oP '\d{1,5}(?=/open)' "$OUT/tcp-all.gnmap" 2>/dev/null | sort -nu | tr '\n' ',' | sed 's/,$//')"
+TCP_PORTS="$(grep -oP '\d{1,5}(?=/open/tcp)' "$OUT/tcp-all.gnmap" 2>/dev/null | sort -nu | tr '\n' ',' | sed 's/,$//')"
 
 if [[ -z "$TCP_PORTS" ]]; then
     echo "[!] No open TCP ports found in $OUT/tcp-all.gnmap -- skipping targeted rescan and vuln scan."
@@ -62,7 +65,7 @@ if [[ $UDP_RC -ne 0 ]]; then
     echo "[!] UDP sweep exited non-zero ($UDP_RC) -- check $OUT/udp-top100.log (needs root for -sU)" >&2
 fi
 
-UDP_PORTS="$(grep -oP '\d{1,5}(?=/open/udp)' "$OUT/udp-top100.gnmap" 2>/dev/null | sort -nu | tr '\n' ',' | sed 's/,$//')"
+UDP_PORTS="$(grep -oP '\d{1,5}(?=/open(\|filtered)?/udp)' "$OUT/udp-top100.gnmap" 2>/dev/null | sort -nu | tr '\n' ',' | sed 's/,$//')"
 if [[ -n "$UDP_PORTS" ]]; then
     echo "[*] Stage 4/5: targeted UDP -sC/-sV rescan on: $UDP_PORTS"
     $SUDO nmap -sU -p"$UDP_PORTS" -sC -sV -oA "$OUT/udp-targeted" "$TARGET" >"$OUT/udp-targeted.log" 2>&1

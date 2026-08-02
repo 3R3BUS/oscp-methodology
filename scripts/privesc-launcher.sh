@@ -15,14 +15,21 @@ if [[ "$OS" != "linux" && "$OS" != "windows" ]]; then
 fi
 
 OUT="./privesc-launcher-out"
-mkdir -p "$OUT"
+if ! mkdir -p "$OUT"; then
+    echo "[!] Failed to create output directory: $OUT" >&2
+    exit 1
+fi
 
 if [[ "$OS" == "linux" ]]; then
     echo "[*] Staging linPEAS (notes/linux-privesc-advanced.md)"
     if command -v curl >/dev/null 2>&1; then
-        curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh -o "$OUT/linpeas.sh"
-        chmod +x "$OUT/linpeas.sh"
-        echo "[*] Staged: $OUT/linpeas.sh"
+        if curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh -o "$OUT/linpeas.sh"; then
+            chmod +x "$OUT/linpeas.sh"
+            echo "[*] Staged: $OUT/linpeas.sh"
+        else
+            echo "[!] curl download failed (exit $?) -- check connectivity and retry, or stage manually per notes/linux-privesc-advanced.md" >&2
+            exit 1
+        fi
     else
         echo "[!] curl not found -- stage manually per notes/linux-privesc-advanced.md" >&2
         exit 1
@@ -50,8 +57,12 @@ EOF
 else
     echo "[*] Staging winPEAS (notes/windows-privesc-scripts.md)"
     if command -v curl >/dev/null 2>&1; then
-        curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/winPEASx64.exe -o "$OUT/winPEASx64.exe"
-        echo "[*] Staged: $OUT/winPEASx64.exe"
+        if curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/winPEASx64.exe -o "$OUT/winPEASx64.exe"; then
+            echo "[*] Staged: $OUT/winPEASx64.exe"
+        else
+            echo "[!] curl download failed (exit $?) -- check connectivity and retry, or stage manually per notes/windows-privesc-scripts.md" >&2
+            exit 1
+        fi
     else
         echo "[!] curl not found -- stage manually per notes/windows-privesc-scripts.md" >&2
         exit 1

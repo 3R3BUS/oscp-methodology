@@ -70,9 +70,9 @@ crack_one() {
     [[ "$mode" == "31300" ]] && extra_flags+=(--username)
 
     echo "[*] Cracking $hash_file (mode $mode: $label)"
-    hashcat -m "$mode" -a 0 "${extra_flags[@]}" "$hash_file" "$WORDLIST" "${RULE_ARGS[@]}"
+    hashcat -m "$mode" -a 0 ${extra_flags[@]+"${extra_flags[@]}"} "$hash_file" "$WORDLIST" ${RULE_ARGS[@]+"${RULE_ARGS[@]}"}
     echo "[*] Cracked results for $hash_file:"
-    hashcat -m "$mode" "${extra_flags[@]}" "$hash_file" --show
+    hashcat -m "$mode" ${extra_flags[@]+"${extra_flags[@]}"} "$hash_file" --show
     echo
 }
 
