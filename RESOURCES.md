@@ -38,6 +38,11 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`notes/reporting-methodology.md`](notes/reporting-methodology.md) ·
 [`notes/client-side-attacks.md`](notes/client-side-attacks.md) ·
 [`notes/av-evasion-basics.md`](notes/av-evasion-basics.md) ·
+[`notes/passive-recon-osint.md`](notes/passive-recon-osint.md) ·
+[`notes/vulnerability-scanning-methodology.md`](notes/vulnerability-scanning-methodology.md) ·
+[`notes/public-exploit-adaptation.md`](notes/public-exploit-adaptation.md) ·
+[`notes/dpi-evasion-tunneling.md`](notes/dpi-evasion-tunneling.md) ·
+[`notes/metasploit-framework-guide.md`](notes/metasploit-framework-guide.md) ·
 [`scripts/README.md`](scripts/README.md)
 
 > **Start here for the AD set:** [`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md)
@@ -163,6 +168,16 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > **Deep-dive:** [`notes/enum-automation-frameworks.md`](notes/enum-automation-frameworks.md) covers
 > automated enumeration framework selection/usage (AutoRecon, Legion, reconftw-style pipelines) and how to
 > layer them with manual verification rather than trusting output blindly.
+>
+> **Deep-dive:** [`notes/passive-recon-osint.md`](notes/passive-recon-osint.md) covers passive information
+> gathering methodology — whois, Google dorking, theHarvester, Certificate Transparency log searches,
+> Shodan/Censys, recon-ng, email/username enumeration, and document metadata extraction — everything
+> PEN-200 Module 3 teaches that doesn't send packets to the target.
+>
+> **Deep-dive:** [`notes/vulnerability-scanning-methodology.md`](notes/vulnerability-scanning-methodology.md)
+> covers the structured pipeline from enumeration to exploitation — nmap NSE vuln scripts by service,
+> searchsploit version matching, manual checks (default creds, exposed configs), result triage, and
+> pre-exploitation attack planning documentation.
 
 ## 6. Active Directory
 
@@ -289,6 +304,18 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > **Deep-dive:** [`notes/buffer-overflow-legacy.md`](notes/buffer-overflow-legacy.md) — worked legacy
 > stack-overflow methodology notes (fuzz → offset → bad-char → JMP ESP → shellcode), kept for reference-level
 > exploit-dev familiarity even though BOF is no longer scored on the exam.
+>
+> **Deep-dive:** [`notes/public-exploit-adaptation.md`](notes/public-exploit-adaptation.md) covers the
+> PEN-200 Module 8 skill set — locating exploits (searchsploit workflow, GitHub, NVD), reading/understanding
+> PoC code before running it, fixing hardcoded values, Python 2→3 porting (string/bytes, urllib, print),
+> resolving missing dependencies, cross-compiling with mingw-w64, replacing shellcode/payloads, and common
+> pitfalls that waste exam time.
+>
+> **Deep-dive:** [`notes/metasploit-framework-guide.md`](notes/metasploit-framework-guide.md) covers
+> Metasploit Framework usage for the one allowed exam machine — msfconsole workflow, workspace/database
+> management, module search/configuration, multi/handler setup, session management, Meterpreter
+> post-exploitation commands (credential harvesting, pivoting, process migration), useful auxiliary/post
+> modules, and exam strategy for choosing which target to spend Metasploit on.
 
 ## 10. Password Attacks & Cracking
 
@@ -320,6 +347,11 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > **Deep-dive:** [`notes/pivoting-tunneling.md`](notes/pivoting-tunneling.md) covers worked multi-hop
 > pivot chains (dual-pivot ligolo-ng/chisel setups, SSH -R/-L/-D combinations, proxychains config gotchas)
 > beyond the single-tool summaries in the table above.
+>
+> **Deep-dive:** [`notes/dpi-evasion-tunneling.md`](notes/dpi-evasion-tunneling.md) covers PEN-200 Module 14
+> — what to do when DPI appliances kill non-HTTP traffic on allowed ports: HTTP tunneling with chisel,
+> HTTPS/TLS wrapping with stunnel and ncat --ssl, DNS tunneling (dnscat2), ICMP tunneling (icmpsh),
+> Neo-reGeorg webshell tunneling, and a protocol selection decision tree.
 
 ## 12. Reporting & Note-Taking Tools
 
@@ -471,6 +503,22 @@ to **authorized** penetration testing education and OSCP exam preparation.
       [`scripts/README.md`](scripts/README.md) §14.5. Enumeration/harvesting only, matching this repo's
       established exam-scope discipline; the one gray area (`web-recon.sh --nuclei-full`) is gated
       behind an explicit opt-in flag and warning banner rather than being default behavior.
+
+- [x] Passive recon / OSINT methodology (PEN-200 Module 3) — whois, Google dorking, theHarvester,
+      Certificate Transparency, Shodan/Censys, recon-ng, email enumeration, metadata extraction — done,
+      see [`notes/passive-recon-osint.md`](notes/passive-recon-osint.md).
+- [x] Vulnerability scanning methodology (PEN-200 Module 4) — structured nmap NSE vuln scanning by
+      service, searchsploit version matching, manual checks, result triage and attack planning — done,
+      see [`notes/vulnerability-scanning-methodology.md`](notes/vulnerability-scanning-methodology.md).
+- [x] Public exploit adaptation (PEN-200 Module 8) — locating exploits, fixing hardcoded values,
+      Python 2→3 porting, cross-compiling with mingw-w64, dependency resolution, shellcode replacement —
+      done, see [`notes/public-exploit-adaptation.md`](notes/public-exploit-adaptation.md).
+- [x] DPI evasion tunneling (PEN-200 Module 14) — HTTP/HTTPS tunneling, stunnel, DNS/ICMP tunneling,
+      Neo-reGeorg webshell tunnel, protocol selection decision tree — done, see
+      [`notes/dpi-evasion-tunneling.md`](notes/dpi-evasion-tunneling.md).
+- [x] Metasploit Framework usage guide (PEN-200 Module 15) — msfconsole workflow, workspace/database
+      management, multi/handler, Meterpreter post-exploitation, session management, exam strategy —
+      done, see [`notes/metasploit-framework-guide.md`](notes/metasploit-framework-guide.md).
 
 **Still open:**
 
