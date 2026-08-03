@@ -1,9 +1,11 @@
 # Report Structure & Writing Methodology
 
-*Scope note: this file covers how to structure, write, and QA the actual submitted report — not
-proctoring rules or live screenshot discipline, which are already covered in detail in
-[`EXAM-TIPS.md`](../EXAM-TIPS.md) §3 and cross-referenced throughout rather than repeated here. For
-authorized OSCP exam/lab use only; contains no exam-specific target information.*
+*Scope note: this file covers how to capture evidence, structure the report, and QA it before
+submission. The hard **rules** on proof files and screenshot composition live in
+[`EXAM-TIPS.md`](../EXAM-TIPS.md) §3 and are cross-referenced rather than repeated; §5–6 below cover
+the **strategy and tooling** layer on top of them (what to shoot vs. log, how much, with what).
+Proctoring rules stay in `EXAM-TIPS.md` §1. For authorized OSCP exam/lab use only; contains no
+exam-specific target information.*
 
 **Why this file exists:** [`RESOURCES.md`](../RESOURCES.md) §12 lists note-taking/reporting *tools*
 (Obsidian, CherryTree, SysReptor, PwnDoc-ng, the noraj/chvancooten templates) but says nothing about
@@ -226,6 +228,246 @@ write-up window — catching a missing screenshot with 20 minutes left is a bad 
 - [ ] A final top-to-bottom read-through for spelling/grammar and section-ordering consistency —
       sloppy presentation doesn't cost points directly, but it undermines confidence in a report whose
       whole job is to prove rigor.
+
+---
+
+## 5. Evidence Capture Strategy — Screenshots, Logs, and Recording
+
+The most common question about exam documentation is some version of *"do I just hammer the
+screenshot key all day?"* The answer is no, and the reason is worth understanding, because the
+failure mode of over-screenshotting is as real as the failure mode of under-screenshotting.
+
+### 5.1 Screenshots and text logs do different jobs
+
+| | Screenshots | Text logs |
+|---|---|---|
+| **What they prove** | Identity — *this user, on this host, at this privilege level* | Reproduction — *these commands, this output, in this order* |
+| **Good at** | Binding a claim to a machine; GUI state; the human grader's visual check | Full output, searchable, copy-pasteable into the report |
+| **Bad at** | Long output (illegible at PDF scale), searching, copy-paste | Proving *which host* you were on, or that a shell was interactive |
+| **Cost per capture** | Manual, interrupts flow | Zero — set up once, runs unattended |
+| **Right volume** | ~6–12 per target, composed | Everything, always on |
+
+The trap in "screenshot everything" is treating screenshots as the *primary* record. A screenshot of
+200 lines of nmap output is worse than useless: unreadable when embedded, unsearchable at 3am, and it
+displaced the text you actually needed to paste into §6. Meanwhile the shots that genuinely matter —
+the composed proof frames — get lost in a folder of 400 unlabeled PNGs.
+
+**So: log all text automatically, screenshot deliberately.**
+
+### 5.2 The three approaches, and which fails
+
+Candidates generally pick one of three postures. They are not equivalent.
+
+**A. Screenshots as you go — ✅ yes, for proof moments.**
+Composed shots at defined checkpoints: foothold, post-privesc, each proof file, plus anything
+GUI-only. Roughly six to twelve per target. Each one framed to satisfy the five-element rule in
+[`EXAM-TIPS.md`](../EXAM-TIPS.md) §3 in a single frame. This is the backbone of your evidence.
+
+**B. Full recording — ✅ yes, as a safety net; ❌ no, as your evidence.**
+Continuous terminal logging (§5.3) costs nothing and should always be running — it is what makes
+"full, untruncated output" achievable without thinking about it. A **screen recording** is a
+reasonable personal backstop on top of that, but understand its limits: you cannot embed video in a
+PDF report, and scrubbing twenty hours of footage to find one frame at hour 23 is a worse position
+than simply having taken the screenshot. Treat any recording as *disaster recovery for a capture you
+missed*, never as the capture itself. Confirm current OffSec policy on local recording against the
+live exam guide before relying on it.
+
+**C. Go back for screenshots after completing the box — ❌ this is the one that fails people.**
+It sounds efficient: root everything first, collect evidence at the end. It breaks for four reasons,
+and they compound:
+
+1. **The window closes and access is gone instantly.** Anything uncaptured at that moment is
+   permanently uncapturable. There is no grace period.
+2. **Re-establishing a shell costs time you won't have.** Going back means re-running the exploit
+   chain at hour 20 while tired, on a box you've already stopped thinking about.
+3. **Reverts destroy your foothold.** Reverting a stuck machine is normal during the exam. If you
+   revert a box you rooted but didn't screenshot, that work is simply gone, and you may not
+   reproduce it.
+4. **Exploits are not always repeatable.** A service you crashed, a one-shot race, a password you
+   changed, an account you locked out — plenty of footholds don't survive a second attempt.
+
+The rule from §2.1 restated in operational terms: **capture proof at the moment you hold the shell,
+not when you get around to it.** The thirty seconds it costs mid-exploit is the cheapest insurance
+available.
+
+### 5.3 What to screenshot — the checkpoint list
+
+Take a composed screenshot at exactly these moments, and you will have covered every graded claim:
+
+| # | Moment | Must show |
+|---|---|---|
+| 1 | Initial foothold | command, output, `whoami`/`id`, hostname, IP |
+| 2 | `local.txt` read | interactive shell, original path, contents, IP |
+| 3 | Privesc landed | elevated `whoami`, hostname, IP |
+| 4 | `proof.txt` read | interactive shell, original path, contents, elevated user, IP |
+| 5 | Any GUI-only step | Burp request/response, browser state, BloodHound path — no text equivalent exists |
+| 6 | Anything surprising | the unusual thing you'll want to explain in prose later |
+
+Everything else — enumeration output, failed attempts, the fifteen commands between foothold and
+privesc — belongs in the **text log**, not in a screenshot.
+
+**Bias slightly toward more rather than fewer**, but the extra shots should be *composed*, not
+reflexive. A shot you can't identify later is not evidence.
+
+### 5.4 Naming and filing, as you capture
+
+Misfiled evidence is a top source of write-up-window panic. Impose structure at capture time:
+
+```
+~/exam/
+├── 10.10.10.11/
+│   ├── 01-foothold.png
+│   ├── 02-localtxt.png
+│   ├── 03-privesc.png
+│   ├── 04-prooftxt.png
+│   ├── session-1430.log
+│   └── notes.md
+├── 10.10.10.12/
+└── ad/
+    ├── bloodhound-path.png
+    ├── da-proof.png
+    └── credential-ledger.md
+```
+
+Numbered prefixes keep shots in chronological order in any file browser, and the number maps directly
+onto the figure order in §6 of the report. One directory per target IP means you never have to
+remember which host a capture came from.
+
+---
+
+## 6. Capture Tooling Setup
+
+Set this up **before** exam day and rehearse it on a practice box. Fumbling with a screenshot tool
+during the exam is exactly the kind of avoidable friction that costs a target.
+
+### 6.1 Terminal logging (always on, zero effort)
+
+```bash
+# Simplest: script(1) with timing, one log per target session
+mkdir -p ~/exam/10.10.10.11
+script -f ~/exam/10.10.10.11/session-$(date +%H%M).log
+# ...everything you type from here is logged, verbatim, including output...
+exit                       # closes the log cleanly
+```
+
+`-f` flushes after every write, so the log survives a crash or a hard disconnect.
+
+```bash
+# tmux users: log a pane on demand, or bind it to a key
+tmux pipe-pane -o "cat >> ~/exam/10.10.10.11/pane-$(date +%H%M).log"
+
+# Persistent binding — prefix + H starts/stops logging the current pane
+# (~/.tmux.conf)
+bind H pipe-pane -o "cat >> ~/exam/pane-#S-#I-#P-$(date +%H%M).log" \; \
+      display-message "logging toggled"
+```
+
+Strip ANSI colour codes before pasting log content into the report:
+
+```bash
+sed -r 's/\x1B\[[0-9;]*[mGKHJ]//g' session-1430.log > session-1430-clean.log
+```
+
+### 6.2 Screenshots
+
+```bash
+# Flameshot — interactive region select, then save. Best default on Kali.
+flameshot gui -p ~/exam/10.10.10.11/
+
+# scrot — whole screen, auto-named, no interaction
+scrot ~/exam/10.10.10.11/'%H%M-%S.png'
+
+# maim + slop — region select, no GUI dependency
+maim -s ~/exam/10.10.10.11/01-foothold.png
+```
+
+Bind one of these to a key you can hit without thinking. The point is that taking a *composed* shot
+should cost you two seconds, so you never skip one because it felt like an interruption.
+
+### 6.3 Make every terminal self-documenting
+
+The five-element rule is much easier to satisfy if the information is already on screen. Put the
+context in your prompt and in a one-line banner you run on landing:
+
+```bash
+# On the target, immediately after landing a shell -- one frame, everything proven
+echo "=== $(whoami) @ $(hostname) ===" ; id ; ip addr 2>/dev/null | grep 'inet '
+```
+
+```cmd
+:: Windows equivalent
+echo === %USERNAME% @ %COMPUTERNAME% === & whoami & ipconfig | findstr IPv4
+```
+
+Run that, then `cat` the proof file in the same terminal, and a single screenshot satisfies every
+composition requirement at once. Consider aliasing it — the less it costs, the more consistently
+you'll do it.
+
+### 6.4 Rehearse the pipeline, not just the tools
+
+On a practice box, do a full dry run: land a shell, run the banner, screenshot, read the proof file,
+screenshot, close the log, and then **write that box up from your evidence alone** — no scrollback,
+no memory. Whatever you find yourself missing is exactly what you'd have missed on exam day. This is
+the single highest-value hour of report preparation available, and almost nobody does it.
+
+---
+
+## 7. The 24-Hour Write-Up Window
+
+The window is generous *if* your live capture was disciplined and brutal if it wasn't. A workable
+shape, assuming you finish the exam tired:
+
+| Phase | Roughly | What |
+|---|---|---|
+| 1 | First hour | **Sleep-adjacent triage.** Before resting: copy all evidence off the VM, verify every proof screenshot exists and is legible, and confirm proof files were submitted through the control panel. This is the only irreversible-deadline work. |
+| 2 | After rest | Assemble §6 per-target sections from your live notes. Mechanical if §1.2's skeleton was filled live. |
+| 3 | Mid | Write the connective AD narrative, then the methodology section. |
+| 4 | Late-mid | Executive summary and findings table — **last**, once you know the full shape of what you found. |
+| 5 | Final 2h | QA checklist (§4), PDF export, archive, submit. Do not leave export to the final 20 minutes; PDF conversion surprises are common. |
+
+Writing the executive summary first is a common mistake — you don't yet know what the report says.
+
+---
+
+## 8. What Actually Loses Points
+
+Ranked by how often it bites, from community post-mortems and OffSec's stated requirements:
+
+1. **Proof file read the wrong way.** Webshell, SMB pull, non-interactive read → zero for that target.
+   The single most expensive documentation error, and entirely avoidable.
+2. **Missing IP verification in the proof frame.** You owned the box; you just can't prove *which*
+   box. Same category of loss, same trivial prevention.
+3. **Truncated output on a load-bearing command.** "Output omitted for brevity" on the actual exploit
+   or privesc command breaks the replication standard.
+4. **Unreproducible narrative.** The commands are all there but the *reasoning* isn't — a reader can't
+   tell why you tried that parameter, so they can't follow the path independently.
+5. **Nothing recorded for boxes that didn't root.** Partial credit is real; a foothold you didn't
+   screenshot is worth nothing.
+6. **Severity/summary drift.** The findings table says High, §6 says Critical. Cheap to catch, reads
+   as carelessness.
+7. **Illegible screenshots.** Fine on a 1440p monitor, mush when embedded at report scale.
+8. **Wrong submission format.** PDF-in-`.7z`, current naming convention — verify against the live
+   exam guide, since OffSec updates submission mechanics independently of the scoring model.
+
+Note that items 1, 2, 5, and 8 are *pure process* — they cost nothing technically and are entirely
+preventable by the gate in [`templates/evidence-checklist.md`](../templates/evidence-checklist.md).
+
+---
+
+## 9. Drop-In Templates
+
+Paste-ready scaffolding lives in [`templates/`](../templates/):
+
+| Template | Use |
+|---|---|
+| [`target-note.md`](../templates/target-note.md) | Per-target live capture — mirrors §1.2's skeleton exactly |
+| [`ad-set-note.md`](../templates/ad-set-note.md) | AD chain: credential ledger, host map, attack path |
+| [`exam-report.md`](../templates/exam-report.md) | Full report skeleton with prose scaffolding |
+| [`finding-blocks.md`](../templates/finding-blocks.md) | Pre-written description/impact/remediation for ~22 common OSCP findings |
+| [`evidence-checklist.md`](../templates/evidence-checklist.md) | Per-target gate — run before leaving each box |
+
+Start from OffSec's official `.docx`/`.odt` for the submitted document regardless; the templates
+supply content, not the graded container.
 
 ---
 

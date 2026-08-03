@@ -42,7 +42,8 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`notes/vulnerability-scanning-methodology.md`](notes/vulnerability-scanning-methodology.md) ·
 [`notes/public-exploit-adaptation.md`](notes/public-exploit-adaptation.md) ·
 [`notes/metasploit-framework-guide.md`](notes/metasploit-framework-guide.md) ·
-[`scripts/README.md`](scripts/README.md)
+[`scripts/README.md`](scripts/README.md) ·
+[`templates/README.md`](templates/README.md) (drop-in report + live-note templates)
 
 > **Start here for the AD set:** [`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md)
 > is the sequenced, numbered walkthrough of the whole AD attack chain (assumed-breach credential →
@@ -358,6 +359,29 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | PwnDoc-ng | https://github.com/pwndoc-ng/pwndoc-ng | Self-hosted report generator, customizable DOCX output. |
 | noraj — OSCP Markdown Report Template | https://github.com/noraj/OSCP-Exam-Report-Template-Markdown | Markdown reimplementation of the official OffSec report template. |
 | chvancooten — OSCP Markdown Templates | https://github.com/chvancooten/OSCP-MarkdownReportingTemplates | Widely-used markdown exam/lab report templates + enum script. |
+| **This repo — `templates/`** | [`templates/`](templates/) | Drop-in per-target note, AD credential ledger, full report skeleton, ~22 pre-written finding blocks, per-target evidence gate. |
+| Obsidian OSCP vault templates | https://github.com/pixelbeatzz/oscp-obsidian-vault | Prebuilt Obsidian vault structured for OSCP note-taking. |
+| Typora | https://typora.io/ | Markdown editor with clean PDF export — common last step for markdown-based reports. |
+| Pandoc | https://pandoc.org/ | Markdown → PDF/DOCX conversion; how most markdown-template users produce the final submission. |
+| Flameshot | https://flameshot.org/ | Screenshot tool with region select + fixed save path — see [`notes/reporting-methodology.md`](notes/reporting-methodology.md) §6.2. |
+
+### 12.1 Example Reports & Write-Up References
+
+Read at least one full example report end-to-end **before** exam day. The gap between "I know what
+sections exist" and "I know what depth looks like" is where most first-report anxiety lives.
+
+| Resource | URL | Notes |
+|---|---|---|
+| PWK Example Report (official) | https://www.offsec.com/pwk-online/PWK-Example-Report-v1.pdf | **Start here.** OffSec's own worked example — the authoritative answer on expected format and depth. |
+| PEN-200 Reporting Requirements | https://help.offsec.com/hc/en-us/articles/360046787731-PEN-200-Reporting-Requirements | The replication standard your §6 is graded against. |
+| noraj — sample filled report | https://github.com/noraj/OSCP-Exam-Report-Template-Markdown/tree/master/src | The markdown template with example content filled in — useful for seeing the template in use. |
+| TJnull's OSCP prep guide | https://www.netsecfocus.com/oscp/2019/03/29/The_Journey_to_Try_Harder-_TJNulls_Preparation_Guide_for_PWK_OSCP.html | Long-running community prep guide; includes reporting/documentation advice alongside the well-known box list. |
+| OffSec exam guide (live) | https://help.offsec.com/hc/en-us/articles/360040165632-OSCP-Exam-Guide | **Check submission mechanics here, not in any third-party guide** — format, naming, and archive requirements change independently of the scoring model. |
+
+> **Deep-dive:** [`notes/reporting-methodology.md`](notes/reporting-methodology.md) §5 covers the
+> screenshot-vs-log-vs-recording decision (and why "collect evidence after rooting the box" is the
+> approach that actually fails), §6 the capture tooling setup, §7 a 24-hour-window plan, and §8 a
+> ranked list of what actually loses points.
 
 > **Deep-dive:** [`notes/reporting-methodology.md`](notes/reporting-methodology.md) covers what this
 > table doesn't — the actual report structure matching OffSec's official template (executive summary
