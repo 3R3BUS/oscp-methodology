@@ -36,6 +36,8 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`notes/pivoting-tunneling.md`](notes/pivoting-tunneling.md) ·
 [`notes/file-transfer-matrix.md`](notes/file-transfer-matrix.md) ·
 [`notes/reporting-methodology.md`](notes/reporting-methodology.md) ·
+[`notes/client-side-attacks.md`](notes/client-side-attacks.md) ·
+[`notes/av-evasion-basics.md`](notes/av-evasion-basics.md) ·
 [`scripts/README.md`](scripts/README.md)
 
 > **Start here for the AD set:** [`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md)

