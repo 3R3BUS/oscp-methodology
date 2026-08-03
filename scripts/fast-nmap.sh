@@ -34,8 +34,11 @@ if [[ $EUID -ne 0 ]]; then
     fi
 fi
 
+cleanup() { kill "$TCP_PID" "$UDP_PID" 2>/dev/null; wait 2>/dev/null; }
+trap cleanup INT TERM EXIT
+
 echo "[*] Stage 1/5: fast full-TCP port sweep (background)"
-nmap -p- --min-rate=1000 -T4 -oA "$OUT/tcp-all" "$TARGET" >"$OUT/tcp-all.log" 2>&1 &
+$SUDO nmap -p- --min-rate=1000 -T4 -oA "$OUT/tcp-all" "$TARGET" >"$OUT/tcp-all.log" 2>&1 &
 TCP_PID=$!
 
 echo "[*] Stage 2/5: UDP top-100 sweep (background, parallel with stage 1)"
@@ -49,13 +52,13 @@ if [[ $TCP_RC -ne 0 ]]; then
     echo "[!] Full TCP sweep exited non-zero ($TCP_RC) -- check $OUT/tcp-all.log" >&2
 fi
 
-TCP_PORTS="$(grep -oP '\d{1,5}(?=/open/tcp)' "$OUT/tcp-all.gnmap" 2>/dev/null | sort -nu | tr '\n' ',' | sed 's/,$//')"
+TCP_PORTS="$(grep -oP '\d{1,5}(?=/open(\|filtered)?/tcp)' "$OUT/tcp-all.gnmap" 2>/dev/null | sort -nu | tr '\n' ',' | sed 's/,$//')"
 
 if [[ -z "$TCP_PORTS" ]]; then
     echo "[!] No open TCP ports found in $OUT/tcp-all.gnmap -- skipping targeted rescan and vuln scan."
 else
     echo "[*] Stage 3/5: targeted -sC/-sV rescan on: $TCP_PORTS"
-    nmap -p"$TCP_PORTS" -sC -sV -oA "$OUT/tcp-targeted" "$TARGET" >"$OUT/tcp-targeted.log" 2>&1
+    $SUDO nmap -p"$TCP_PORTS" -sC -sV -oA "$OUT/tcp-targeted" "$TARGET" >"$OUT/tcp-targeted.log" 2>&1
 fi
 
 echo "[*] Waiting on stage 2 (UDP top-100 sweep)..."
@@ -75,7 +78,7 @@ fi
 
 if [[ -n "$TCP_PORTS" ]]; then
     echo "[*] Stage 5/5: --script vuln pass on: $TCP_PORTS"
-    nmap -p"$TCP_PORTS" --script vuln -oA "$OUT/vuln" "$TARGET" >"$OUT/vuln.log" 2>&1
+    $SUDO nmap -p"$TCP_PORTS" --script vuln -oA "$OUT/vuln" "$TARGET" >"$OUT/vuln.log" 2>&1
 else
     echo "[*] Stage 5/5: skipped (no open TCP ports)."
 fi

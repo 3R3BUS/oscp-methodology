@@ -41,7 +41,6 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`notes/passive-recon-osint.md`](notes/passive-recon-osint.md) ·
 [`notes/vulnerability-scanning-methodology.md`](notes/vulnerability-scanning-methodology.md) ·
 [`notes/public-exploit-adaptation.md`](notes/public-exploit-adaptation.md) ·
-[`notes/dpi-evasion-tunneling.md`](notes/dpi-evasion-tunneling.md) ·
 [`notes/metasploit-framework-guide.md`](notes/metasploit-framework-guide.md) ·
 [`scripts/README.md`](scripts/README.md)
 
@@ -345,13 +344,9 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | Metasploit routing/portfwd | https://docs.metasploit.com/ | `route add` + `auxiliary/server/socks_proxy`, `autoroute`, `portfwd`. |
 
 > **Deep-dive:** [`notes/pivoting-tunneling.md`](notes/pivoting-tunneling.md) covers worked multi-hop
-> pivot chains (dual-pivot ligolo-ng/chisel setups, SSH -R/-L/-D combinations, proxychains config gotchas)
-> beyond the single-tool summaries in the table above.
->
-> **Deep-dive:** [`notes/dpi-evasion-tunneling.md`](notes/dpi-evasion-tunneling.md) covers PEN-200 Module 14
-> — what to do when DPI appliances kill non-HTTP traffic on allowed ports: HTTP tunneling with chisel,
-> HTTPS/TLS wrapping with stunnel and ncat --ssl, DNS tunneling (dnscat2), ICMP tunneling (icmpsh),
-> Neo-reGeorg webshell tunneling, and a protocol selection decision tree.
+> pivot chains (dual-pivot ligolo-ng/chisel setups, SSH -R/-L/-D combinations, proxychains config gotchas),
+> plus a DPI evasion section (PEN-200 Module 14) for when standard tunnels fail — stunnel TLS wrapping,
+> chisel HTTP/WebSocket blending, and a protocol selection decision tree.
 
 ## 12. Reporting & Note-Taking Tools
 
@@ -514,8 +509,8 @@ to **authorized** penetration testing education and OSCP exam preparation.
       Python 2→3 porting, cross-compiling with mingw-w64, dependency resolution, shellcode replacement —
       done, see [`notes/public-exploit-adaptation.md`](notes/public-exploit-adaptation.md).
 - [x] DPI evasion tunneling (PEN-200 Module 14) — HTTP/HTTPS tunneling, stunnel, DNS/ICMP tunneling,
-      Neo-reGeorg webshell tunnel, protocol selection decision tree — done, see
-      [`notes/dpi-evasion-tunneling.md`](notes/dpi-evasion-tunneling.md).
+      Neo-reGeorg webshell tunnel, protocol selection decision tree — merged into
+      [`notes/pivoting-tunneling.md`](notes/pivoting-tunneling.md) §DPI Evasion.
 - [x] Metasploit Framework usage guide (PEN-200 Module 15) — msfconsole workflow, workspace/database
       management, multi/handler, Meterpreter post-exploitation, session management, exam strategy —
       done, see [`notes/metasploit-framework-guide.md`](notes/metasploit-framework-guide.md).

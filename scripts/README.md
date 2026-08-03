@@ -2,8 +2,8 @@
 
 Thin bash wrappers around the command sequences already documented (and independently
 verified) across this repo's `notes/*.md` files and `CHEATSHEET.md`. Every script
-**enumerates and harvests, it does not exploit** — nothing here cracks a hash automatically,
-logs into a found credential without you asking it to, or fires an exploit. That framing
+**enumerates, harvests, and cracks** — nothing here logs into a found credential without you
+asking it to or fires an exploit. That framing
 matches this repo's established scope discipline (see `EXAM-TIPS.md`): Kerberoasting,
 AS-REP roasting, RID-brute, BloodHound collection, ADCS `find`, and Nikto/nmap-NSE-style
 scanning are all standard, exam-safe OSCP techniques — these scripts just save you from
@@ -19,7 +19,7 @@ Timeroast, hashcat) is unambiguously fine as a primary technique per the officia
 
 | Script | Purpose | Usage |
 |---|---|---|
-| `fast-nmap.sh` | Full recon sequence: fast TCP sweep → targeted `-sC`/`-sV` rescan → parallel UDP top-100 → `--script vuln` | `./fast-nmap.sh <target>` |
+| `fast-nmap.sh` | Full recon sequence: fast TCP sweep → targeted `-sC`/`-sV` rescan → parallel UDP top-100 → targeted UDP rescan → `--script vuln` | `./fast-nmap.sh <target>` |
 | `web-recon.sh` | whatweb fingerprint, TLS cert SAN grab, robots.txt/sitemap, ffuf vhost fuzzing, feroxbuster dirs/files, scoped nuclei | `./web-recon.sh <target> [--domain example.com] [--nuclei-full]` |
 | `ad-enum.sh` | Post-foothold AD sweep: enum4linux-ng, Timeroast, AS-REP/Kerberoast, RID-brute, GPP/LAPS, delegation, ADCS triage, BloodHound collection — parses out `users.txt` and echoes the right `hashcat -m` mode per hash file found | `./ad-enum.sh <dc_ip> <domain> [-u user -p pass]` |
 | `ligolo-setup.sh` | Attacker-side ligolo-ng TUN + proxy setup, prints the exact agent-side connect-back command to paste onto the pivot host | `./ligolo-setup.sh` (or `--teardown`) |
@@ -34,12 +34,13 @@ than letting the two drift.
 
 ## Dependencies
 
-`nmap`, `ffuf`, `feroxbuster`, `whatweb`, `nuclei`, `curl`, `openssl` (all Kali defaults or one
-`apt`/`go install` away), `enum4linux-ng`, `netexec`/`nxc`, `bloodhound-python`, `certipy-ad`,
-`hashcat`, and [SecuraBV/Timeroast](https://github.com/SecuraBV/Timeroast)'s `timeroast.py`
-(standalone script, no install — just clone/download it into your working directory or PATH).
-Every script checks for its own dependencies up front and prints an install hint rather than
-failing on a bare "command not found."
+`nmap`, `ffuf`, `feroxbuster`, `whatweb`, `nuclei`, `curl`, `openssl`, `jq`, `python3` (all Kali
+defaults or one `apt`/`go install` away), `enum4linux-ng`, `netexec`/`nxc`, `bloodhound-python`,
+`certipy-ad`, `hashcat`, [ligolo-ng](https://github.com/nicocha30/ligolo-ng) `proxy`/`agent`
+binaries (download from releases), and [SecuraBV/Timeroast](https://github.com/SecuraBV/Timeroast)'s
+`timeroast.py` (standalone script, no install — just clone/download it into your working directory
+or PATH). Every script checks for its own dependencies up front and prints an install hint rather
+than failing on a bare "command not found."
 
 ## Output convention
 

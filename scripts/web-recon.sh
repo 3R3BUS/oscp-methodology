@@ -28,7 +28,12 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: $0 <target-ip-or-host> [--domain example.com] [--nuclei-full]" >&2
             exit 0 ;;
-        *) TARGET="$1"; shift ;;
+        *)
+            if [[ -n "$TARGET" ]]; then
+                echo "[!] Multiple targets given ('$TARGET' and '$1') -- only one target allowed." >&2
+                exit 1
+            fi
+            TARGET="$1"; shift ;;
     esac
 done
 
@@ -52,8 +57,12 @@ echo "[*] Output directory: $OUT"
 
 # --- whatweb: tech fingerprint (always) ---
 if command -v whatweb >/dev/null 2>&1; then
-    echo "[*] whatweb fingerprint"
+    echo "[*] whatweb fingerprint (HTTP)"
     whatweb -a 3 "http://$TARGET" 2>&1 | tee "$OUT/whatweb.txt"
+    if echo | timeout 3 openssl s_client -connect "$TARGET:443" >/dev/null 2>&1; then
+        echo "[*] whatweb fingerprint (HTTPS)"
+        whatweb -a 3 "https://$TARGET" 2>&1 | tee -a "$OUT/whatweb.txt"
+    fi
 fi
 
 # --- TLS certificate SAN grab (cheap hostname discovery, only if 443 responds) ---
@@ -72,9 +81,9 @@ fi
 # --- robots.txt / sitemap.xml (near-zero cost) ---
 if command -v curl >/dev/null 2>&1; then
     echo "[*] robots.txt / sitemap.xml"
-    curl -s "http://$TARGET/robots.txt" -o "$OUT/robots.txt" && \
+    curl -sf "http://$TARGET/robots.txt" -o "$OUT/robots.txt" && \
         [[ -s "$OUT/robots.txt" ]] && echo "  robots.txt found ($(wc -l <"$OUT/robots.txt") lines) -> $OUT/robots.txt"
-    curl -s "http://$TARGET/sitemap.xml" -o "$OUT/sitemap.xml" && \
+    curl -sf "http://$TARGET/sitemap.xml" -o "$OUT/sitemap.xml" && \
         [[ -s "$OUT/sitemap.xml" ]] && echo "  sitemap.xml found -> $OUT/sitemap.xml"
 fi
 
@@ -105,9 +114,14 @@ fi
 if command -v feroxbuster >/dev/null 2>&1; then
     FEROX_WORDLIST="/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt"
     if [[ -f "$FEROX_WORDLIST" ]]; then
-        echo "[*] feroxbuster directory/file discovery"
+        echo "[*] feroxbuster directory/file discovery (HTTP)"
         feroxbuster -u "http://$TARGET" -w "$FEROX_WORDLIST" \
             -x php,txt,bak,html,asp,aspx,jsp -t 50 -d 2 -q -o "$OUT/ferox.txt"
+        if echo | timeout 3 openssl s_client -connect "$TARGET:443" >/dev/null 2>&1; then
+            echo "[*] feroxbuster directory/file discovery (HTTPS)"
+            feroxbuster -u "https://$TARGET" -w "$FEROX_WORDLIST" \
+                -x php,txt,bak,html,asp,aspx,jsp -t 50 -d 2 -q -k -o "$OUT/ferox-https.txt"
+        fi
     else
         echo "[!] $FEROX_WORDLIST not found -- skipping feroxbuster." >&2
     fi

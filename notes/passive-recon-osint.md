@@ -1,5 +1,7 @@
 # Passive Information Gathering & OSINT (PEN-200 Module 3)
 
+> **Exam context:** On the OSCP exam, passive recon is limited — you're given IPs, not domains, and most OSINT sources won't have data on lab/exam machines. The real value is in labs and real-world pentests. On exam day, check Shodan (`shodan host <IP>`) and TLS certs (`openssl s_client`) first (30 seconds, may reveal hidden vhosts/services), then move quickly to active scanning.
+
 Passive recon collects intelligence without sending packets to the target — all queries hit third-party services, cached data, or public records. Do this first: it surfaces subdomains, email formats, technology stacks, and employee names that shape your active enumeration.
 
 ## 1. Whois & DNS Passive Lookup
@@ -186,17 +188,6 @@ exiftool -r -Creator -Author downloaded_files/ | \
 ```
 
 Extracted usernames become candidates for AD enumeration, password spraying, and brute-forcing.
-
-## 9. Passive Recon Workflow (Exam Context)
-
-On the OSCP exam, passive recon is limited — you're given IPs, not domains, and most OSINT sources won't have data on lab/exam machines. However:
-
-1. **Google dorking** — search for the target IP directly: `site:<IP>`, `inurl:<IP>`
-2. **Shodan** — `shodan host <IP>` reveals services and banners without scanning
-3. **DNS reverse lookup** — `dig -x <IP>` may reveal a hostname, giving you a domain to pivot from
-4. **Certificate inspection** — `openssl s_client -connect <IP>:443 </dev/null 2>/dev/null | openssl x509 -noout -text` reveals SANs and CN that expose virtual hosts
-
-The real value of passive recon skills is in the lab and real-world pentests. On exam day, move quickly to active scanning — but check Shodan and certs first, it takes 30 seconds and can reveal services you'd otherwise miss.
 
 ## References
 

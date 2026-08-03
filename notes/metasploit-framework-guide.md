@@ -132,9 +132,6 @@ sessions -k 1
 
 # Run a command on a session without interacting
 sessions -C "sysinfo" -i 1
-
-# Route traffic through a session (for pivoting)
-route add 10.10.10.0/24 1      # route subnet through session 1
 ```
 
 ## 5. Meterpreter Post-Exploitation
@@ -201,17 +198,9 @@ ipconfig                        # network interfaces
 arp                             # ARP table
 netstat                         # active connections
 route                           # routing table
-
-# Port forwarding through Meterpreter
-portfwd add -l 3389 -p 3389 -r <internal_ip>
-portfwd list
-portfwd delete -l 3389
-
-# Autoroute for pivoting
-run post/multi/manage/autoroute
-# or manually:
-run autoroute -s 10.10.10.0/24
 ```
+
+Meterpreter `portfwd` and `autoroute` exist but are banned for pivoting on the OSCP exam (Metasploit may not be used to route/forward traffic toward additional machines). For pivoting syntax, see [`notes/pivoting-tunneling.md`](pivoting-tunneling.md) — use ligolo-ng/chisel/SSH instead.
 
 ### Other Useful Commands
 

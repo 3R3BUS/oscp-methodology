@@ -17,6 +17,8 @@ detect_hash_mode() {
 
     case "$h" in
         '$krb5tgs$23$'*)   echo "13100|Kerberos 5 TGS-REP etype 23 (Kerberoast)"; return ;;
+        '$krb5tgs$17$'*)   echo "19600|Kerberos 5 TGS-REP etype 17 (AES128 Kerberoast)"; return ;;
+        '$krb5tgs$18$'*)   echo "19700|Kerberos 5 TGS-REP etype 18 (AES256 Kerberoast)"; return ;;
         '$krb5asrep$23$'*) echo "18200|Kerberos 5 AS-REP etype 23 (AS-REP Roast)"; return ;;
         '$krb5pa$'*)       echo "7500|Kerberos 5 AS-REQ Pre-Auth etype 23"; return ;;
         *'$sntp-ms$'*)     echo "31300|MS-SNTP (Timeroast) -- crack with hashcat's --username flag, RID is embedded as the username field"; return ;;
@@ -27,9 +29,15 @@ detect_hash_mode() {
         eyJ*.eyJ*.*)       echo "16500|JWT (HS256) -- crack the HMAC secret"; return ;;
     esac
 
-    # NetNTLMv2 (Responder/relay capture): USER::DOMAIN:CHALLENGE:HMAC:BLOB
+    # NetNTLMv1/v2 (Responder/relay capture): USER::DOMAIN:LM_RESP:NTLM_RESP:CHALLENGE
+    # Distinguish by response field length: v1 = 48 hex chars, v2 = 100+ hex chars
     if [[ "$h" == *"::"*":"*":"*":"* ]]; then
-        echo "5600|NetNTLMv2 (Responder/relay capture)"
+        local response_field="${h##*:}"
+        if [[ ${#response_field} -le 48 ]]; then
+            echo "5500|NetNTLMv1 (Responder capture)"
+        else
+            echo "5600|NetNTLMv2 (Responder/relay capture)"
+        fi
         return
     fi
 

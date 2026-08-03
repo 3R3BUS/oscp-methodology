@@ -14,11 +14,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/hashmodes.sh
 source "$SCRIPT_DIR/lib/hashmodes.sh"
 
-TARGET_PATH="${1:-}"
-WORDLIST="${2:-/usr/share/wordlists/rockyou.txt}"
+TARGET_PATH=""
+WORDLIST="/usr/share/wordlists/rockyou.txt"
 USE_RULES=0
-for arg in "$@"; do
-    [[ "$arg" == "--rules" ]] && USE_RULES=1
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --rules) USE_RULES=1; shift ;;
+        -*)
+            echo "[!] Unknown flag: $1" >&2
+            echo "Usage: $0 <hash-file-or-ad-enum-out-dir> [wordlist] [--rules]" >&2
+            exit 1 ;;
+        *)
+            if [[ -z "$TARGET_PATH" ]]; then
+                TARGET_PATH="$1"
+            else
+                WORDLIST="$1"
+            fi
+            shift ;;
+    esac
 done
 
 if [[ -z "$TARGET_PATH" ]]; then
@@ -41,7 +54,7 @@ fi
 
 RULE_ARGS=()
 if [[ $USE_RULES -eq 1 ]]; then
-    for candidate in ./OneRuleToRuleThemAll.rule /usr/share/hashcat/rules/OneRuleToRuleThemAll.rule; do
+    for candidate in ./OneRuleToRuleThemAll.rule /usr/share/hashcat/rules/OneRuleToRuleThemAll.rule /usr/share/hashcat/rules/best64.rule; do
         if [[ -f "$candidate" ]]; then
             RULE_ARGS=(-r "$candidate")
             echo "[*] Using rule file: $candidate"
