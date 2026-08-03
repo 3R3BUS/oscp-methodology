@@ -4,6 +4,8 @@
 
 Post-exploitation pivoting splits into two generations: legacy SOCKS-proxy tools (chisel, sshuttle, socat, plink, netsh, Metasploit) that require `proxychains` to wrap each external tool, and **ligolo-ng**, a TUN-interface tool that now dominates practice since native tools (nmap, evil-winrm, netexec, smbclient) hit pivoted hosts directly with no wrapper needed.
 
+> **Helper script:** [`scripts/ligolo-setup.sh`](../scripts/README.md) creates the TUN interface, starts the proxy, and prints the agent-side connect-back command.
+
 ---
 
 ## Ligolo-ng — current preferred tool for multi-hop/native-tool pivoting

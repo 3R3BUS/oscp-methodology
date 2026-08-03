@@ -6,6 +6,8 @@ you what to try, in what order, and why, and what "good enough to move on" looks
 It deliberately does not re-paste command blocks that already live in the companion deep-dive files;
 follow each pointer for the actual syntax. For authorized OSCP exam/lab use only.*
 
+> **Helper script:** [`scripts/ad-enum.sh`](../scripts/README.md) automates the enumeration stages below (enum4linux-ng, RID brute, Kerberoast, AS-REP roast, BloodHound collection, ADCS triage, GPP/LAPS, and more) in one command.
+
 **How to use this document:** read it once end-to-end before exam day so the shape of the chain is in
 your head, then keep it open as a checklist during the exam — work top to bottom, but jump straight to
 whichever stage your current foothold calls for using the quick-reference at the bottom.

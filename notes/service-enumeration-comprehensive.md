@@ -5,6 +5,8 @@ LDAP, SMTP, SNMP, DNS, RDP, WinRM, SSH, and the major database engines (MySQL/Ma
 Oracle, PostgreSQL, Redis). Compiled across several focused research passes (each section notes
 its own sourcing); jump to the relevant `##` section below for a given protocol.
 
+> **Helper scripts:** [`scripts/fast-nmap.sh`](../scripts/README.md) automates the nmap scan sequence (full TCP → targeted -sC/-sV → UDP top-100 → --script vuln). [`scripts/web-recon.sh`](../scripts/README.md) chains whatweb, ffuf vhost fuzzing, feroxbuster, and nuclei.
+
 ---
 
 ## FTP & SMB/NetBIOS Manual Enumeration

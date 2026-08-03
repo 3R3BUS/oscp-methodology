@@ -117,7 +117,30 @@ A consistent ~5s delay on the true condition (vs. near-instant on false) confirm
 
 ---
 
-### 1.6 SQLi to OS Access (manual, pre-sqlmap)
+### 1.6 Stacked Queries
+**Explanation:** Some DBMS+driver combinations let you terminate the first query with `;` and append a wholly new statement. This is how `xp_cmdshell` and `INSERT`/`UPDATE` chains work through SQLi. **Support matrix:** MSSQL (almost always, via TDS protocol) and PostgreSQL (libpq default) support stacked queries natively. MySQL blocks them in `mysqli_query()` / PHP's default single-query mode (requires `mysqli_multi_query()` explicitly), so stacked queries rarely work against PHP+MySQL apps. Always test: inject `; SELECT 1--` and check for errors vs. silent success.
+
+```sql
+id=1; INSERT INTO users(username,password) VALUES('backdoor','hacked')--
+id=1; UPDATE users SET password='hacked' WHERE username='admin'--
+```
+
+---
+
+### 1.7 Second-Order SQL Injection
+**Explanation:** The payload is stored (e.g., in a registration field) and executed later when a different query uses the stored value unsanitized. The insertion point and the detonation point are different pages/functions — enumeration requires tracing how stored data flows back into SQL. Common scenario: register a username like `admin'--`, then trigger a password-change flow that builds `UPDATE users SET password='X' WHERE username='admin'--'`.
+
+```
+Registration: username = admin'--
+Password change uses: UPDATE users SET password='newpass' WHERE username='admin'--'
+  → resets admin's password, not the attacker's account
+```
+
+**Detection:** look for any stored field (username, address, profile bio) that later appears in error messages, changes other users' data, or causes application errors on a different page than where the input was originally submitted.
+
+---
+
+### 1.8 SQLi to OS Access (manual, pre-sqlmap)
 **Explanation:** With `FILE` privilege (MySQL) or `xp_cmdshell` (MSSQL), a confirmed injection can escalate straight to reading/writing files or command execution by hand, without waiting on `sqlmap --os-shell`.
 
 **Example (MySQL — write a webshell via `INTO OUTFILE`, requires `FILE` priv + known web root):**

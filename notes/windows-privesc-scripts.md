@@ -2,6 +2,8 @@
 
 *Local Windows privesc tooling reference (2026). For authorized penetration testing / CTF use only.*
 
+> **Helper script:** [`scripts/privesc-launcher.sh windows`](../scripts/README.md) stages winPEAS and prints transfer/execution options.
+
 ---
 
 ## 1. Enumeration Scripts

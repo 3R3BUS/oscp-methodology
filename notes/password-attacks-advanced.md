@@ -2,6 +2,8 @@
 
 *Beyond basic hashcat mode usage (see CHEATSHEET.md §4 for the mode-number reference). For authorized pentest/exam prep only.*
 
+> **Helper scripts:** [`scripts/hashid-credcheck.sh`](../scripts/README.md) auto-identifies hash formats and sweeps credentials across protocols. [`scripts/crack.sh`](../scripts/README.md) chains hash-ID into hashcat with sensible defaults.
+
 Modern AD-focused engagements favor unauthenticated Kerberos pre-auth abuse over noisy SMB/LDAP binds, since Kerberos pre-auth failures are timed/logged differently and don't always burn the bad-password counter the same way.
 
 ---

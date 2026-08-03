@@ -2,6 +2,8 @@
 
 *Beyond `sudo -l` and basic SUID binaries. For authorized penetration testing / CTF use only.*
 
+> **Helper script:** [`scripts/privesc-launcher.sh linux`](../scripts/README.md) stages linPEAS and prints transfer options.
+
 ---
 
 ## 1. Linux Capabilities Abuse

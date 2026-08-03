@@ -134,12 +134,15 @@ to **authorized** penetration testing education and OSCP exam preparation.
 
 > **Deep-dive:** [`notes/web-attack-techniques.md`](notes/web-attack-techniques.md) covers file-upload bypass
 > (extension/content-type/magic-byte/polyglot), insecure deserialization basics (PHP/Java/Python), WordPress
-> enumeration/exploitation via wpscan, and a generic CMS/framework fingerprinting workflow.
+> enumeration/exploitation via wpscan, a generic CMS/framework fingerprinting workflow, and API testing
+> methodology (endpoint discovery, HTTP verb tampering, IDOR, mass assignment).
 >
 > **Deep-dive:** [`notes/web-core-vulnerabilities.md`](notes/web-core-vulnerabilities.md) covers manual
-> (pre-sqlmap) SQL injection (UNION/error/blind-boolean/blind-time-based), XSS (reflected/stored/DOM +
-> cookie theft), LFI/RFI (path traversal, PHP wrapper abuse, log/session poisoning to RCE), OS command
-> injection (detection + filter bypass), and SSRF/XXE primers.
+> (pre-sqlmap) SQL injection (UNION/error/blind-boolean/blind-time-based/stacked queries/second-order), XSS
+> (reflected/stored/DOM + cookie theft), LFI/RFI (path traversal, PHP wrapper abuse, log/session poisoning
+> to RCE, SMB-based RFI), OS command injection (detection + filter bypass), SSRF/XXE, SSTI (Jinja2/Twig/
+> FreeMarker/Smarty), JWT attacks (none/HS256-confusion/kid injection), and NoSQL injection (auth bypass +
+> blind extraction).
 
 ## 5. Recon & External Enumeration
 
@@ -234,6 +237,14 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > **Deep-dive:** [`notes/windows-privesc-scripts.md`](notes/windows-privesc-scripts.md) covers scripted/manual
 > Windows privesc enumeration (winPEAS/PowerUp/Seatbelt flag reference plus manual registry/service/token checks)
 > and how to cross-check automated tool output before acting on it.
+>
+> **Deep-dive:** [`notes/av-evasion-basics.md`](notes/av-evasion-basics.md) covers AMSI bypass techniques,
+> manual payload obfuscation (msfvenom encoders/encryption, custom C shellcode runners, XOR-encrypted
+> loaders, PowerShell shellcode injection), and transfer/execution strategies when Defender is active.
+>
+> **Deep-dive:** [`notes/client-side-attacks.md`](notes/client-side-attacks.md) covers HTA payloads
+> (`mshta.exe`), VBA macro payloads (Office documents), OLE object embedding, Windows Library files
+> (`.library-ms` + WebDAV), and delivery considerations — the PEN-200 Module 11 attack surface.
 >
 > **Deep-dive:** [`notes/easy-lpe-cve-quickhits.md`](notes/easy-lpe-cve-quickhits.md) covers the Windows half
 > of a curated known-CVE fast path for local privesc — PrintNightmare, HiveNightmare/SeriousSAM, and the
@@ -446,6 +457,12 @@ to **authorized** penetration testing education and OSCP exam preparation.
       [`notes/reporting-methodology.md`](notes/reporting-methodology.md) (report skeleton matching
       OffSec's official template, live-capture-to-report pipeline, CVSS-adjacent severity reference
       table for common finding types, pre-submission QA checklist).
+- [x] Client-side attacks (PEN-200 Module 11) — HTA payloads, VBA macros, OLE object embedding,
+      Windows Library files — was a complete syllabus gap with zero coverage. Done, see
+      [`notes/client-side-attacks.md`](notes/client-side-attacks.md).
+- [x] Antivirus evasion basics (PEN-200 Module 12) — AMSI bypass, custom shellcode runners, XOR
+      encryption, PowerShell injection — was a complete syllabus gap. Done, see
+      [`notes/av-evasion-basics.md`](notes/av-evasion-basics.md).
 
 - [x] Executable helper scripts operationalizing the documented command sequences (recon, web recon,
       post-foothold AD enumeration, ligolo pivoting, local-privesc staging, hash cracking) — done, see
