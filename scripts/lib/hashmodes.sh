@@ -5,38 +5,71 @@
 # NTLM/SAM dumps, NetNTLMv2 captures, timeroast, JWT, common Unix crypt). It does not attempt to
 # cover hashcat's full mode list — CHEATSHEET.md §4 is the exhaustive reference for anything else.
 
+# hashcat_extra_flags <mode>
+# Prints any extra hashcat flags that a given mode's on-disk format requires, or nothing.
+# Some formats carry a leading identifier field that hashcat only tolerates with --username:
+#   31300 (Timeroast) -- timeroast.py emits "<RID>:$sntp-ms$<hash>$<salt>"
+#   1000/3000 from pwdump/secretsdump -- "user:rid:lmhash:nthash:::"
+# Without the flag hashcat rejects the line outright, so every emitted command must include it.
+hashcat_extra_flags() {
+    case "$1" in
+        31300) echo "--username" ;;
+        *)     echo "" ;;
+    esac
+}
+
 # detect_hash_mode <hash-string>
 # Prints "<mode>|<label>" on stdout, or "unknown|" if nothing matched. Never fails the caller.
+#
+# Also sets three globals: HASH_MODE, HASH_LABEL, and HASH_IS_PWDUMP (1 when the input was a
+# pwdump/secretsdump line). Callers that need HASH_IS_PWDUMP must invoke this function DIRECTLY --
+# reading the printed value via "$(detect_hash_mode ...)" runs it in a subshell, where the globals
+# are set and then discarded when that subshell exits. Use the globals, not command substitution:
+#     detect_hash_mode "$line" >/dev/null
+#     mode="$HASH_MODE"; label="$HASH_LABEL"
+# Internal: record the result in the globals AND print it, so both calling styles work.
+_hm_set() {
+    HASH_MODE="$1"
+    HASH_LABEL="$2"
+    printf '%s|%s\n' "$1" "$2"
+}
+
 detect_hash_mode() {
     local h="$1"
+    HASH_IS_PWDUMP=0
+    HASH_MODE="unknown"
+    HASH_LABEL=""
 
     # secretsdump/SAM-dump line format: user:rid:lmhash:nthash:::  -> isolate the NT hash field
     if [[ "$h" =~ ^[^:]*:[0-9]+:[0-9a-fA-F]{32}:[0-9a-fA-F]{32}::: ]]; then
         h="$(cut -d: -f4 <<<"$h")"
+        HASH_IS_PWDUMP=1
     fi
 
     case "$h" in
-        '$krb5tgs$23$'*)   echo "13100|Kerberos 5 TGS-REP etype 23 (Kerberoast)"; return ;;
-        '$krb5tgs$17$'*)   echo "19600|Kerberos 5 TGS-REP etype 17 (AES128 Kerberoast)"; return ;;
-        '$krb5tgs$18$'*)   echo "19700|Kerberos 5 TGS-REP etype 18 (AES256 Kerberoast)"; return ;;
-        '$krb5asrep$23$'*) echo "18200|Kerberos 5 AS-REP etype 23 (AS-REP Roast)"; return ;;
-        '$krb5pa$'*)       echo "7500|Kerberos 5 AS-REQ Pre-Auth etype 23"; return ;;
-        *'$sntp-ms$'*)     echo "31300|MS-SNTP (Timeroast) -- crack with hashcat's --username flag, RID is embedded as the username field"; return ;;
-        '$2a$'*|'$2b$'*|'$2y$'*) echo "3200|bcrypt"; return ;;
-        '$1$'*)            echo '500|md5crypt ($1$, Unix)'; return ;;
-        '$5$'*)            echo '7400|sha256crypt ($5$, Unix)'; return ;;
-        '$6$'*)            echo '1800|sha512crypt ($6$, Unix, modern /etc/shadow)'; return ;;
-        eyJ*.eyJ*.*)       echo "16500|JWT (HS256) -- crack the HMAC secret"; return ;;
+        '$krb5tgs$23$'*)   _hm_set 13100 "Kerberos 5 TGS-REP etype 23 (Kerberoast)"; return ;;
+        '$krb5tgs$17$'*)   _hm_set 19600 "Kerberos 5 TGS-REP etype 17 (AES128 Kerberoast)"; return ;;
+        '$krb5tgs$18$'*)   _hm_set 19700 "Kerberos 5 TGS-REP etype 18 (AES256 Kerberoast)"; return ;;
+        '$krb5asrep$23$'*) _hm_set 18200 "Kerberos 5 AS-REP etype 23 (AS-REP Roast)"; return ;;
+        '$krb5pa$'*)       _hm_set 7500  "Kerberos 5 AS-REQ Pre-Auth etype 23"; return ;;
+        *'$sntp-ms$'*)     _hm_set 31300 "MS-SNTP (Timeroast) -- needs --username, the RID is a leading field"; return ;;
+        '$2a$'*|'$2b$'*|'$2y$'*) _hm_set 3200 "bcrypt"; return ;;
+        '$1$'*)            _hm_set 500   'md5crypt ($1$, Unix)'; return ;;
+        '$5$'*)            _hm_set 7400  'sha256crypt ($5$, Unix)'; return ;;
+        '$6$'*)            _hm_set 1800  'sha512crypt ($6$, Unix, modern /etc/shadow)'; return ;;
+        eyJ*.eyJ*.*)       _hm_set 16500 "JWT (HS256) -- crack the HMAC secret"; return ;;
     esac
 
-    # NetNTLMv1/v2 (Responder/relay capture): USER::DOMAIN:LM_RESP:NTLM_RESP:CHALLENGE
-    # Distinguish by response field length: v1 = 48 hex chars, v2 = 100+ hex chars
+    # NetNTLMv1/v2 (Responder/relay capture). Both share the shape
+    # USER::DOMAIN:<field>:<field>:<field>, so key off the LAST colon-delimited field:
+    #   v1 ends with the 16-hex server challenge  -> short
+    #   v2 ends with the variable-length blob     -> long (hundreds of hex chars)
     if [[ "$h" == *"::"*":"*":"*":"* ]]; then
-        local response_field="${h##*:}"
-        if [[ ${#response_field} -le 48 ]]; then
-            echo "5500|NetNTLMv1 (Responder capture)"
+        local last_field="${h##*:}"
+        if [[ ${#last_field} -le 48 ]]; then
+            _hm_set 5500 "NetNTLMv1 (Responder capture)"
         else
-            echo "5600|NetNTLMv2 (Responder/relay capture)"
+            _hm_set 5600 "NetNTLMv2 (Responder/relay capture)"
         fi
         return
     fi
@@ -44,16 +77,16 @@ detect_hash_mode() {
     # bare 32-hex: ambiguous between raw MD5 and NTLM -- default to NTLM since that's what every
     # AD-adjacent stage in this script set actually produces; note the ambiguity in the label.
     if [[ "$h" =~ ^[0-9a-fA-F]{32}$ ]]; then
-        echo "1000|NTLM (or raw MD5 -- 32-hex is ambiguous; NTLM assumed since that's what this script set's own output produces, use -m 0 instead if you know it's MD5)"
+        _hm_set 1000 "NTLM (or raw MD5 -- 32-hex is ambiguous; NTLM assumed since that's what this script set's own output produces, use -m 0 instead if you know it's MD5)"
         return
     fi
 
     if [[ "$h" =~ ^[0-9a-fA-F]{40}$ ]]; then
-        echo "100|SHA1 (raw)"
+        _hm_set 100 "SHA1 (raw)"
         return
     fi
 
-    echo "unknown|"
+    _hm_set unknown ""
 }
 
 # hashmode_summary_line <file>
@@ -61,14 +94,21 @@ detect_hash_mode() {
 # for the first non-empty line of a hash file.
 hashmode_summary_line() {
     local file="$1"
-    local first_line
+    local first_line mode label extra
     first_line="$(grep -v '^\s*$' "$file" 2>/dev/null | head -n1)"
     [[ -z "$first_line" ]] && return 1
-    local result="${first_line}"
-    IFS='|' read -r mode label <<<"$(detect_hash_mode "$result")"
+    # Direct call, not command substitution -- see detect_hash_mode's comment: the subshell a
+    # "$(...)" creates would discard HASH_IS_PWDUMP before we could read it below.
+    detect_hash_mode "$first_line" >/dev/null
+    mode="$HASH_MODE"; label="$HASH_LABEL"
     if [[ "$mode" == "unknown" ]]; then
         echo "  ! could not auto-detect hash type for $file -- check CHEATSHEET.md §4 manually"
-    else
-        echo "  hashcat -m $mode \"$file\" /usr/share/wordlists/rockyou.txt   # $label"
+        return 0
+    fi
+    extra="$(hashcat_extra_flags "$mode")"
+    echo "  hashcat -m $mode ${extra:+$extra }\"$file\" /usr/share/wordlists/rockyou.txt   # $label"
+    if [[ "${HASH_IS_PWDUMP:-0}" -eq 1 ]]; then
+        echo "    ^ this file is in pwdump format (user:rid:lm:nt:::) -- extract the NT column first:"
+        echo "      cut -d: -f4 \"$file\" > ${file%.hash}-nt.hash"
     fi
 }

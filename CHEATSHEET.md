@@ -255,9 +255,12 @@ gunzip /usr/share/wordlists/rockyou.txt.gz    # extracts to /usr/share/wordlists
 | NTLM                                 | 1000      | Windows SAM/local hash |
 | NetNTLMv1                            | 5500      | |
 | NetNTLMv2                            | 5600      | Responder/relay captures |
-| Kerberos 5 TGS-REP etype 23 (Kerberoast) | 13100 | `.kirbi`/hashcat TGS format |
+| Kerberos 5 TGS-REP etype 23 (Kerberoast) | 13100 | `.kirbi`/hashcat TGS format — RC4, the common case |
+| Kerberos 5 TGS-REP etype 17 (Kerberoast, AES128) | 19600 | hash starts `$krb5tgs$17$` |
+| Kerberos 5 TGS-REP etype 18 (Kerberoast, AES256) | 19700 | hash starts `$krb5tgs$18$` — what you get when RC4 is disabled domain-wide |
 | Kerberos 5 AS-REP etype 23 (AS-REP Roast) | 18200 | no-preauth accounts |
 | Kerberos 5 AS-REQ Pre-Auth (etype 23)| 7500      | |
+| MS-SNTP (Timeroast)                  | 31300     | computer-account hashes over NTP, **unauthenticated** — needs `--username` (see §4.1) |
 | LM                                   | 3000      | legacy Windows |
 | MSSQL (2012+)                        | 1731      | |
 | MySQL 4.1+ (sha1(sha1))              | 300       | |
@@ -307,6 +310,30 @@ hashcat -m 1000 hashes.txt --show
 # Brute-force mask attack (e.g. 8-digit numeric PIN)
 hashcat -m 0 hash.txt -a 3 ?d?d?d?d?d?d?d?d
 ```
+
+### 4.1 Formats that need `--username` (or hashcat rejects every line)
+
+Some tools emit hashes with a leading identifier field. hashcat parses the whole line by default and
+errors out with "No hashes loaded" / "Separator unmatched" — which reads like a wrong `-m` and sends
+you chasing the wrong problem. Two you will actually hit:
+
+```bash
+# Timeroast output is "<RID>:$sntp-ms$<hash>$<salt>" -- the RID is a leading field
+hashcat -m 31300 --username timeroast.hash /usr/share/wordlists/rockyou.txt
+
+# pwdump / secretsdump output is "user:rid:lmhash:nthash:::" -- three fields before the NT hash.
+# --username alone is not enough here; cut the NT column out first.
+cut -d: -f4 secretsdump.out | sort -u > nt-hashes.txt
+hashcat -m 1000 nt-hashes.txt /usr/share/wordlists/rockyou.txt
+```
+
+`scripts/crack.sh` in this repo handles both automatically — it appends `--username` for mode 31300
+and splits the NT column out of pwdump input before invoking hashcat.
+
+**Kerberoast etype note:** `13100` (RC4) is the common case, but a domain with RC4 disabled hands back
+etype 17/18 tickets that need `19600`/`19700` instead. Check the prefix of the hash you actually
+captured (`$krb5tgs$23$` vs `$krb5tgs$18$`) rather than assuming 13100 — AES tickets are also
+dramatically slower to crack, so a wordlist that would have worked on RC4 may simply time out.
 
 **Faster (nxc):** once a hash cracks (or even without cracking, for pass-the-hash), validate it directly against the target instead of hand-testing logins:
 ```bash

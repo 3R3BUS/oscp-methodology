@@ -29,12 +29,27 @@ SUDO=""
 if [[ $EUID -ne 0 ]]; then
     if command -v sudo >/dev/null 2>&1; then
         SUDO="sudo"
+        # Prime the sudo timestamp now, while we still own the terminal. Stages 1 and 2 both launch
+        # into the background simultaneously; if sudo had to prompt from there, two background jobs
+        # would fight over the tty and the password prompt would be invisible.
+        if ! sudo -v; then
+            echo "[!] sudo authentication failed -- SYN and UDP scans will fall back/fail." >&2
+        fi
     else
         echo "[!] Not running as root and no sudo available -- UDP scan and SYN scan may fail/fallback." >&2
     fi
 fi
 
-cleanup() { kill "$TCP_PID" "$UDP_PID" 2>/dev/null; wait 2>/dev/null; }
+# Initialized before the trap is installed: the handler can fire (Ctrl+C, early exit) before the
+# background jobs are launched, and under `set -u` an unset var would crash the handler itself.
+TCP_PID=""
+UDP_PID=""
+cleanup() {
+    [[ -n "$TCP_PID" ]] && kill "$TCP_PID" 2>/dev/null
+    [[ -n "$UDP_PID" ]] && kill "$UDP_PID" 2>/dev/null
+    wait 2>/dev/null
+    return 0
+}
 trap cleanup INT TERM EXIT
 
 echo "[*] Stage 1/5: fast full-TCP port sweep (background)"

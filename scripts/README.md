@@ -1,9 +1,9 @@
 # OSCP Helper Scripts
 
 Thin bash wrappers around the command sequences already documented (and independently
-verified) across this repo's `notes/*.md` files and `CHEATSHEET.md`. Every script
-**enumerates, harvests, and cracks** — nothing here logs into a found credential without you
-asking it to or fires an exploit. That framing
+verified) across this repo's `notes/*.md` files and `CHEATSHEET.md`. These scripts
+**enumerate, harvest, and crack offline** — none of them fires an exploit, and none logs into a
+discovered credential unless you explicitly ask it to via `hashid-credcheck.sh cred`. That framing
 matches this repo's established scope discipline (see `EXAM-TIPS.md`): Kerberoasting,
 AS-REP roasting, RID-brute, BloodHound collection, ADCS `find`, and Nikto/nmap-NSE-style
 scanning are all standard, exam-safe OSCP techniques — these scripts just save you from
@@ -20,17 +20,27 @@ Timeroast, hashcat) is unambiguously fine as a primary technique per the officia
 | Script | Purpose | Usage |
 |---|---|---|
 | `fast-nmap.sh` | Full recon sequence: fast TCP sweep → targeted `-sC`/`-sV` rescan → parallel UDP top-100 → targeted UDP rescan → `--script vuln` | `./fast-nmap.sh <target>` |
-| `web-recon.sh` | whatweb fingerprint, TLS cert SAN grab, robots.txt/sitemap, ffuf vhost fuzzing, feroxbuster dirs/files, scoped nuclei | `./web-recon.sh <target> [--domain example.com] [--nuclei-full]` |
+| `web-recon.sh` | whatweb fingerprint, TLS cert SAN grab, robots.txt/sitemap, ffuf vhost fuzzing, feroxbuster dirs/files, scoped nuclei — probes `http://` and `https://` up front and runs every stage against whichever responds, so an HTTPS-only box is scanned fully | `./web-recon.sh <target> [--domain example.com] [--nuclei-full]` |
 | `ad-enum.sh` | Post-foothold AD sweep: enum4linux-ng, Timeroast, AS-REP/Kerberoast, RID-brute, GPP/LAPS, delegation, ADCS triage, BloodHound collection — parses out `users.txt` and echoes the right `hashcat -m` mode per hash file found | `./ad-enum.sh <dc_ip> <domain> [-u user -p pass]` |
 | `ligolo-setup.sh` | Attacker-side ligolo-ng TUN + proxy setup, prints the exact agent-side connect-back command to paste onto the pivot host | `./ligolo-setup.sh` (or `--teardown`) |
 | `hashid-credcheck.sh` | `hash` subcommand identifies a hash format and echoes the hashcat mode; `cred` subcommand sweeps a found credential across smb/winrm/rdp/mssql/ssh/ftp | `./hashid-credcheck.sh hash <string-or-file>` / `./hashid-credcheck.sh cred <target> <user> <pass_or_hash>` |
 | `privesc-launcher.sh` | Stages linPEAS or winPEAS (+ prints PrivescCheck one-liner) and the transfer options to get it onto target | `./privesc-launcher.sh <linux\|windows>` |
 | `crack.sh` | hashcat wrapper — auto-detects mode via the shared lib, defaults to rockyou.txt (+ OneRuleToRuleThemAll with `--rules`), can crack an entire `ad-enum.sh` output directory in one pass | `./crack.sh <hash-file-or-dir> [wordlist] [--rules]` |
 
-`lib/hashmodes.sh` is a shared library (not a standalone script) sourced by `hashid-credcheck.sh`
-and `crack.sh` — the hash-format-detection logic lives in exactly one place. Its mode numbers
+`lib/hashmodes.sh` is a shared library (not a standalone script) sourced by **three** callers —
+`hashid-credcheck.sh`, `crack.sh`, and `ad-enum.sh` (for its end-of-run "here's how to crack what I
+found" summary) — so the hash-format-detection logic lives in exactly one place. Its mode numbers
 mirror `CHEATSHEET.md` §4; if you fix a mode number there, update `lib/hashmodes.sh` too rather
 than letting the two drift.
+
+Two implementation notes for anyone editing it:
+
+- `detect_hash_mode` both prints `<mode>|<label>` **and** sets `HASH_MODE`/`HASH_LABEL`/`HASH_IS_PWDUMP`.
+  Callers that need `HASH_IS_PWDUMP` must call it directly and read the globals — capturing the printed
+  value with `"$(detect_hash_mode ...)"` runs it in a subshell where those globals are discarded.
+- Formats whose on-disk layout requires extra hashcat flags (currently Timeroast's mode 31300, which
+  needs `--username`) get them from `hashcat_extra_flags`, so every emitted command and every actual
+  invocation stay in step. Don't hardcode the flag at a call site.
 
 ## Dependencies
 
@@ -39,12 +49,18 @@ defaults or one `apt`/`go install` away), `enum4linux-ng`, `netexec`/`nxc`, `blo
 `certipy-ad`, `hashcat`, [ligolo-ng](https://github.com/nicocha30/ligolo-ng) `proxy`/`agent`
 binaries (download from releases), and [SecuraBV/Timeroast](https://github.com/SecuraBV/Timeroast)'s
 `timeroast.py` (standalone script, no install — just clone/download it into your working directory
-or PATH). Every script checks for its own dependencies up front and prints an install hint rather
-than failing on a bare "command not found."
+or PATH; see [`notes/ad-methodology-end-to-end.md`](../notes/ad-methodology-end-to-end.md) §2 for what
+Timeroasting actually gets you and when it's worth the ten seconds). Every script checks for its own
+dependencies up front and prints an install hint rather than failing on a bare "command not found."
 
 ## Output convention
 
-Each script writes into `./<scriptname>-out/<target>/`, preserving full raw tool output (matching
+The scanning scripts (`fast-nmap.sh`, `web-recon.sh`, `ad-enum.sh`) write into
+`./<scriptname>-out/<target>/`; `privesc-launcher.sh` stages into `./privesc-launcher-out/` (no
+per-target subdirectory, since it isn't target-specific). `crack.sh` and `hashid-credcheck.sh` work
+against files you already have and create no output tree of their own — except that `crack.sh` writes
+a `-nt.hash` sidecar next to any pwdump-format input it has to split. Output preserves full raw tool
+output (matching
 `notes/reporting-methodology.md`'s "capture full output live" rule) while printing a condensed
 summary to the terminal. Nothing is silently discarded — quiet just means the terminal isn't
 spammed, not that evidence isn't kept for your report.

@@ -71,16 +71,35 @@ crack_one() {
     local hash_file="$1"
     [[ -s "$hash_file" ]] || { echo "[*] Skipping empty file: $hash_file"; return; }
 
-    local first_line mode label extra_flags=()
+    local first_line mode label extra extra_flags=()
     first_line="$(grep -v '^\s*$' "$hash_file" | head -n1)"
-    IFS='|' read -r mode label <<<"$(detect_hash_mode "$first_line")"
+    # Direct call, not command substitution -- a "$(...)" subshell would discard HASH_IS_PWDUMP.
+    detect_hash_mode "$first_line" >/dev/null
+    mode="$HASH_MODE"; label="$HASH_LABEL"
 
     if [[ "$mode" == "unknown" ]]; then
         echo "[!] Could not auto-detect hash type for $hash_file -- skipping. Check CHEATSHEET.md §4 manually." >&2
         return
     fi
 
-    [[ "$mode" == "31300" ]] && extra_flags+=(--username)
+    # Format-mandated flags come from the shared lib so this stays in step with what
+    # hashmode_summary_line prints -- the two must never suggest different invocations.
+    extra="$(hashcat_extra_flags "$mode")"
+    [[ -n "$extra" ]] && extra_flags+=("$extra")
+
+    # pwdump/secretsdump lines carry three fields before the NT hash; hashcat can't consume them
+    # directly, so split the NT column into its own file rather than handing hashcat a file it will
+    # reject line by line.
+    if [[ "${HASH_IS_PWDUMP:-0}" -eq 1 ]]; then
+        local nt_file="${hash_file%.hash}-nt.hash"
+        echo "[*] $hash_file is pwdump format -- extracting NT hash column -> $nt_file"
+        cut -d: -f4 "$hash_file" | grep -E '^[0-9a-fA-F]{32}$' | sort -u > "$nt_file"
+        if [[ ! -s "$nt_file" ]]; then
+            echo "[!] No NT hashes extracted from $hash_file -- skipping." >&2
+            return
+        fi
+        hash_file="$nt_file"
+    fi
 
     echo "[*] Cracking $hash_file (mode $mode: $label)"
     hashcat -m "$mode" -a 0 ${extra_flags[@]+"${extra_flags[@]}"} "$hash_file" "$WORDLIST" ${RULE_ARGS[@]+"${RULE_ARGS[@]}"}

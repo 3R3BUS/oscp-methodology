@@ -55,14 +55,29 @@ if ! mkdir -p "$OUT"; then
 fi
 echo "[*] Output directory: $OUT"
 
+# Probe both schemes once, up front, and drive every later stage off the result -- a target that
+# only serves HTTPS (443 open, 80 closed) would otherwise get a silently half-empty scan.
+SCHEMES=()
+if command -v curl >/dev/null 2>&1; then
+    curl -s -o /dev/null --max-time 5 "http://$TARGET/" 2>/dev/null && SCHEMES+=("http")
+    curl -sk -o /dev/null --max-time 5 "https://$TARGET/" 2>/dev/null && SCHEMES+=("https")
+else
+    SCHEMES=("http")
+fi
+if [[ ${#SCHEMES[@]} -eq 0 ]]; then
+    echo "[!] Neither http:// nor https:// responded on $TARGET -- is a web server actually running?" >&2
+    echo "    Continuing with http:// only; stages below will likely come back empty." >&2
+    SCHEMES=("http")
+fi
+echo "[*] Responding schemes: ${SCHEMES[*]}"
+
 # --- whatweb: tech fingerprint (always) ---
 if command -v whatweb >/dev/null 2>&1; then
-    echo "[*] whatweb fingerprint (HTTP)"
-    whatweb -a 3 "http://$TARGET" 2>&1 | tee "$OUT/whatweb.txt"
-    if echo | timeout 3 openssl s_client -connect "$TARGET:443" >/dev/null 2>&1; then
-        echo "[*] whatweb fingerprint (HTTPS)"
-        whatweb -a 3 "https://$TARGET" 2>&1 | tee -a "$OUT/whatweb.txt"
-    fi
+    : >"$OUT/whatweb.txt"
+    for scheme in "${SCHEMES[@]}"; do
+        echo "[*] whatweb fingerprint (${scheme^^})"
+        whatweb -a 3 "$scheme://$TARGET" 2>&1 | tee -a "$OUT/whatweb.txt"
+    done
 fi
 
 # --- TLS certificate SAN grab (cheap hostname discovery, only if 443 responds) ---
@@ -81,10 +96,20 @@ fi
 # --- robots.txt / sitemap.xml (near-zero cost) ---
 if command -v curl >/dev/null 2>&1; then
     echo "[*] robots.txt / sitemap.xml"
-    curl -sf "http://$TARGET/robots.txt" -o "$OUT/robots.txt" && \
-        [[ -s "$OUT/robots.txt" ]] && echo "  robots.txt found ($(wc -l <"$OUT/robots.txt") lines) -> $OUT/robots.txt"
-    curl -sf "http://$TARGET/sitemap.xml" -o "$OUT/sitemap.xml" && \
-        [[ -s "$OUT/sitemap.xml" ]] && echo "  sitemap.xml found -> $OUT/sitemap.xml"
+    for scheme in "${SCHEMES[@]}"; do
+        SFX=""
+        [[ "$scheme" == "https" && ${#SCHEMES[@]} -gt 1 ]] && SFX="-https"
+        for doc in robots.txt sitemap.xml; do
+            # -f so a 404 is a failure rather than a saved error page; -k for self-signed certs,
+            # which is the norm on lab/exam boxes.
+            if curl -skf --max-time 10 "$scheme://$TARGET/$doc" -o "$OUT/${doc%.*}${SFX}.${doc##*.}" \
+                && [[ -s "$OUT/${doc%.*}${SFX}.${doc##*.}" ]]; then
+                echo "  [$scheme] $doc found -> $OUT/${doc%.*}${SFX}.${doc##*.}"
+            else
+                rm -f "$OUT/${doc%.*}${SFX}.${doc##*.}"
+            fi
+        done
+    done
 fi
 
 # --- ffuf VHost fuzzing (only meaningful with a domain to fuzz against; matches CHEATSHEET.md's
@@ -93,16 +118,21 @@ fi
 if [[ -n "$DOMAIN" ]] && command -v ffuf >/dev/null 2>&1; then
     WORDLIST="/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt"
     if [[ -f "$WORDLIST" ]]; then
-        echo "[*] ffuf VHost fuzzing against $DOMAIN"
-        BASELINE_SIZE="$(curl -s -o /dev/null -w '%{size_download}' -H "Host: definitely-not-a-real-vhost-$RANDOM.$DOMAIN" "http://$TARGET/" 2>/dev/null)"
-        ffuf -u "http://$TARGET" -H "Host: FUZZ.$DOMAIN" -w "$WORDLIST" \
-            -fs "${BASELINE_SIZE:-0}" -o "$OUT/vhosts.json" -of json -s
-        if [[ -f "$OUT/vhosts.json" ]] && command -v jq >/dev/null 2>&1; then
-            echo "  Vhost hits:"
-            jq -r '.results[]?.input.FUZZ' "$OUT/vhosts.json" 2>/dev/null | sed 's/^/    /'
-        else
-            echo "  Raw results: $OUT/vhosts.json"
-        fi
+        for scheme in "${SCHEMES[@]}"; do
+            SFX=""
+            [[ "$scheme" == "https" && ${#SCHEMES[@]} -gt 1 ]] && SFX="-https"
+            echo "[*] ffuf VHost fuzzing against $DOMAIN over $scheme"
+            BASELINE_SIZE="$(curl -sk -o /dev/null -w '%{size_download}' --max-time 10 \
+                -H "Host: definitely-not-a-real-vhost-$RANDOM.$DOMAIN" "$scheme://$TARGET/" 2>/dev/null)"
+            ffuf -u "$scheme://$TARGET" -H "Host: FUZZ.$DOMAIN" -w "$WORDLIST" \
+                -fs "${BASELINE_SIZE:-0}" -o "$OUT/vhosts${SFX}.json" -of json -s
+            if [[ -f "$OUT/vhosts${SFX}.json" ]] && command -v jq >/dev/null 2>&1; then
+                echo "  Vhost hits ($scheme):"
+                jq -r '.results[]?.input.FUZZ' "$OUT/vhosts${SFX}.json" 2>/dev/null | sed 's/^/    /'
+            else
+                echo "  Raw results: $OUT/vhosts${SFX}.json"
+            fi
+        done
     else
         echo "[!] $WORDLIST not found -- skipping vhost fuzzing." >&2
     fi
@@ -114,14 +144,13 @@ fi
 if command -v feroxbuster >/dev/null 2>&1; then
     FEROX_WORDLIST="/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt"
     if [[ -f "$FEROX_WORDLIST" ]]; then
-        echo "[*] feroxbuster directory/file discovery (HTTP)"
-        feroxbuster -u "http://$TARGET" -w "$FEROX_WORDLIST" \
-            -x php,txt,bak,html,asp,aspx,jsp -t 50 -d 2 -q -o "$OUT/ferox.txt"
-        if echo | timeout 3 openssl s_client -connect "$TARGET:443" >/dev/null 2>&1; then
-            echo "[*] feroxbuster directory/file discovery (HTTPS)"
-            feroxbuster -u "https://$TARGET" -w "$FEROX_WORDLIST" \
-                -x php,txt,bak,html,asp,aspx,jsp -t 50 -d 2 -q -k -o "$OUT/ferox-https.txt"
-        fi
+        for scheme in "${SCHEMES[@]}"; do
+            SFX=""
+            [[ "$scheme" == "https" && ${#SCHEMES[@]} -gt 1 ]] && SFX="-https"
+            echo "[*] feroxbuster directory/file discovery (${scheme^^})"
+            feroxbuster -u "$scheme://$TARGET" -w "$FEROX_WORDLIST" \
+                -x php,txt,bak,html,asp,aspx,jsp -t 50 -d 2 -q -k -o "$OUT/ferox${SFX}.txt"
+        done
     else
         echo "[!] $FEROX_WORDLIST not found -- skipping feroxbuster." >&2
     fi
@@ -139,24 +168,34 @@ if command -v nuclei >/dev/null 2>&1; then
     on the actual OSCP exam. The scoped default run (no flag) stays within Nikto/NSE-vuln
     territory, which is explicitly allowed.
 EOF
-        echo "[*] nuclei (FULL template set, exam-risk -- see warning above)"
-        nuclei -u "http://$TARGET" -o "$OUT/nuclei-full.txt"
+        for scheme in "${SCHEMES[@]}"; do
+            SFX=""
+            [[ "$scheme" == "https" && ${#SCHEMES[@]} -gt 1 ]] && SFX="-https"
+            echo "[*] nuclei (FULL template set over $scheme, exam-risk -- see warning above)"
+            nuclei -u "$scheme://$TARGET" -o "$OUT/nuclei-full${SFX}.txt"
+        done
     else
-        echo "[*] nuclei (scoped: tech/panel/misconfig/default-login only, dos+fuzz excluded)"
-        nuclei -u "http://$TARGET" -tags tech,exposed-panel,misconfig,default-login \
-            -etags dos,fuzz -o "$OUT/nuclei-scoped.txt"
+        for scheme in "${SCHEMES[@]}"; do
+            SFX=""
+            [[ "$scheme" == "https" && ${#SCHEMES[@]} -gt 1 ]] && SFX="-https"
+            echo "[*] nuclei over $scheme (scoped: tech/panel/misconfig/default-login only, dos+fuzz excluded)"
+            nuclei -u "$scheme://$TARGET" -tags tech,exposed-panel,misconfig,default-login \
+                -etags dos,fuzz -o "$OUT/nuclei-scoped${SFX}.txt"
+        done
     fi
 fi
 
 echo
 echo "=================== SUMMARY: $TARGET ==================="
-[[ -f "$OUT/whatweb.txt" ]] && echo "-- whatweb --" && cat "$OUT/whatweb.txt"
-if [[ -f "$OUT/ferox.txt" ]]; then
-    echo "-- feroxbuster hits (2xx/3xx) --"
-    grep -E '^(2[0-9]{2}|3[0-9]{2})[[:space:]]' "$OUT/ferox.txt" 2>/dev/null | head -n 40
-fi
-for f in "$OUT/nuclei-scoped.txt" "$OUT/nuclei-full.txt"; do
-    [[ -f "$f" && -s "$f" ]] && echo "-- $(basename "$f") --" && cat "$f"
+[[ -s "$OUT/whatweb.txt" ]] && echo "-- whatweb --" && cat "$OUT/whatweb.txt"
+for f in "$OUT/ferox.txt" "$OUT/ferox-https.txt"; do
+    if [[ -s "$f" ]]; then
+        echo "-- $(basename "$f") hits (2xx/3xx) --"
+        grep -E '^(2[0-9]{2}|3[0-9]{2})[[:space:]]' "$f" 2>/dev/null | head -n 40
+    fi
+done
+for f in "$OUT"/nuclei-*.txt; do
+    [[ -s "$f" ]] && echo "-- $(basename "$f") --" && cat "$f"
 done
 echo "==========================================================="
 echo "[*] Full raw output saved under: $OUT/"

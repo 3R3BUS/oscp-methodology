@@ -67,6 +67,41 @@ any one of these gets you back to Stage 1. See
 [`notes/password-attacks-advanced.md`](password-attacks-advanced.md) for the Kerbrute enumeration/spray
 syntax, the AS-REP roasting sweep, and the Responder/mitm6 setup.
 
+### Timeroasting (fully unauthenticated, costs ~10 seconds)
+
+Worth firing off in this stage because it needs **no credential and no valid username list** — the one
+enumeration step in this phase with essentially no prerequisites. Windows DCs answer MS-SNTP time
+requests with a response authenticated using the *computer account's* password hash. Ask for a bunch of
+RIDs and the DC hands back a crackable hash for each machine account that exists, which doubles as a
+computer-account enumeration primitive even when nothing cracks.
+
+```bash
+# SecuraBV/Timeroast -- standalone script, no install
+git clone https://github.com/SecuraBV/Timeroast
+python3 Timeroast/timeroast.py <dc_ip> -o timeroast.hash
+
+# Crack: mode 31300, and --username is mandatory (RID is a leading field -- see CHEATSHEET.md §4.1)
+hashcat -m 31300 --username timeroast.hash /usr/share/wordlists/rockyou.txt
+```
+
+**Set your expectations correctly.** Machine account passwords are 120-character random values rotated
+every 30 days by default — those will never crack, and that is the normal outcome. Timeroasting pays off
+in exactly two situations:
+
+1. **A computer account whose password was set manually** — pre-staged/pre-created machine accounts,
+   accounts joined by a script with a fixed password, or an admin who reset one by hand. These are
+   frequently weak and crack instantly.
+2. **Legacy/appliance accounts** where the password was never rotated (`msDS-Machine-Account-Quota`
+   objects created by a user, non-Windows devices joined to the domain).
+
+So: run it because it is free, let it crack in the background, and **move on immediately** rather than
+waiting on it. A cracked computer account is a full domain credential (it can authenticate over LDAP and
+SMB), so the payoff when it does land is large — it just usually doesn't. The RID list it returns is
+useful regardless as a machine inventory.
+
+`scripts/ad-enum.sh` runs this automatically as an unauthenticated stage when `timeroast.py` is
+present in your cwd or PATH.
+
 ---
 
 ## 3. BloodHound Path Analysis — Choosing a Path

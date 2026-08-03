@@ -13,7 +13,7 @@ its own sourcing); jump to the relevant `##` section below for a given protocol.
 
 Compiled from HackTricks, the NetExec/nxc official wiki source, enum4linux/enum4linux-ng, smbmap, and the nmap NSE script source tree (verified against source code, not just secondary blog posts, where possible).
 
-## Topic 1: FTP Enumeration (Port 21)
+## 1. FTP Enumeration (Port 21)
 
 ### Overview
 FTP (port 21, control channel) is a plaintext protocol on OSCP-style boxes. Manual enumeration on exam day typically follows this order: banner grab → check `HELP`/`FEAT` → test anonymous login → check for writable/bounce-capable config → automated nmap NSE sweep for anon/bounce/backdoor checks that aren't part of `-sC`/`--script vuln`.
@@ -103,7 +103,7 @@ FTP bounce scanning (`nmap -b`, manual `PORT`/`EPRT`, Metasploit `ftpbounce`) is
 
 ---
 
-## Topic 2: SMB / NetBIOS Enumeration (Ports 139, 445)
+## 2. SMB / NetBIOS Enumeration (Ports 139, 445)
 
 ### Overview
 SMB/NetBIOS is the highest-value OSCP enumeration surface. The standard workflow is: host/NetBIOS discovery → SMB version/signing/dialect fingerprint → null/guest session test → share enumeration → user/group/RID/password-policy enumeration via `rpcclient`/`enum4linux(-ng)`/`netexec` → targeted nmap NSE for anything not covered by `-sC`/`--script vuln`.
@@ -468,8 +468,6 @@ These three services are recurring OSCP/PWK enumeration targets because they fre
 
 ---
 
-## Findings
-
 ### RPC Enumeration
 
 **1. Fingerprint the portmapper / RPC services with rpcinfo**
@@ -753,8 +751,6 @@ The Global Catalog (3268 plaintext, 3269 over SSL) exposes a forest-wide partial
 - **SSH**: Enumeration is mostly banner/algorithm grabbing (`nc`, `nmap` NSE scripts) to fingerprint OS/version, followed by credential or key-based access attempts. A recurring OSCP/CTF pattern is reusing a private key found on one host (or in a backup/git repo) against other hosts' `authorized_keys`, and deriving the matching public key from a found private key with `ssh-keygen -y`.
 
 ---
-
-## Findings
 
 ### RDP
 
@@ -1401,8 +1397,6 @@ DNS is one of the first services enumerated on both external and internal (AD) O
 7. On internal/AD assessments, query DNS `SRV` records to locate domain controllers, global catalog servers, and Kerberos/LDAP endpoints — all without needing credentials or domain membership.
 
 ---
-
-## Findings
 
 ### 1. Enumerate authoritative name servers first
 **Command:**
@@ -2125,7 +2119,6 @@ When WebDAV requires authentication (common on Windows/IIS with Basic or NTLM au
 | `cadaver` | Interactive WebDAV shell (browse, upload, download, move) |
 | `curl` | Manual PUT/MOVE/DELETE requests for precise exploitation |
 
-
 ---
 
 ## CGI-bin / Shellshock (CVE-2014-6271)
@@ -2176,7 +2169,6 @@ Any HTTP header that the web server maps into the CGI environment is a valid inj
 | `nmap` (`http-shellshock` NSE) | Automated Shellshock detection against a known CGI endpoint |
 | `curl` | Manual header injection for detection and exploitation |
 | `nmap` (`http-enum` NSE) | Generic web content discovery that may find `/cgi-bin/` entries |
-
 
 ---
 
@@ -2235,7 +2227,6 @@ Hashcat mode `7300` handles IPMI2 RAKP HMAC-SHA1 hashes. The hash format output 
 | Metasploit `ipmi_dumphashes` | Capture RAKP password hashes via the protocol-level flaw |
 | `ipmitool` | Authenticated BMC interaction (user enum, config, chassis control) |
 | `hashcat` (`-m 7300`) | Crack captured IPMI 2.0 RAKP hashes offline |
-
 
 ---
 

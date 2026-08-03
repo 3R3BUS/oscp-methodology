@@ -1,18 +1,15 @@
-# OSCP File Transfer Technique Matrix (2026) — Research Report
+# OSCP File Transfer Technique Matrix (2026)
 
 *Scope note: this file covers file transfer / tool-staging only. For reverse/bind shell
 payload generation and one-liners, see [`CHEATSHEET.md` §5–6](../CHEATSHEET.md#5-msfvenom-payload-generation)
 (msfvenom payloads, netcat/Python/PHP reverse-shell one-liners, shell stabilization).*
 
-## Topic
 File transfer / tool-staging techniques for OSCP-style engagements: moving payloads, loot, and post-exploitation tooling between an attacker box (typically Kali Linux, occasionally Windows) and Windows/Linux targets, including scenarios with no direct network egress from the target.
 
 ## Overview
 OSCP-style engagements require multiple interchangeable file-transfer techniques because target environments vary: some allow outbound HTTP to the attacker, some only allow SMB, some have no network egress at all and only an interactive shell/RCE primitive is available, and AV/EDR or PowerShell constrained-language mode may block specific LOLBins. The core technique set is: **web-server pull** (attacker hosts a file, target fetches it with `curl`/`wget`/`certutil`/`IWR`/`bitsadmin`), **SMB push/pull** (attacker runs `impacket-smbserver`, target uses native `copy`/`net use`), **SSH-based transfer** (`scp` when credentials + sshd exist), and **shell-native encoding transfer** (base64/`certutil -encode`/`/dev/tcp`) for when no dedicated transfer channel exists at all. All techniques below are still the standard, exam-current set as of 2026 — the underlying binaries (`certutil.exe`, `bitsadmin.exe`, PowerShell, `curl`, `wget`, Python's `http.server`, OpenSSH, bash) have not materially changed their transfer syntax in recent Windows/Linux releases.
 
 ---
-
-## Findings
 
 ### 1. Attacker Linux → Target Windows (pull-based, HTTP)
 
