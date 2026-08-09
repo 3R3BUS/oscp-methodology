@@ -519,7 +519,7 @@ sections exist" and "I know what depth looks like" is where most first-report an
 
 - [x] Executable helper scripts operationalizing the documented command sequences (recon, web recon,
       post-foothold AD enumeration, ligolo pivoting, local-privesc staging, hash cracking) — done, see
-      [`scripts/README.md`](scripts/README.md) §14.5. Enumeration/harvesting only, matching this repo's
+      §14.5 above and [`scripts/README.md`](scripts/README.md). Enumeration/harvesting only, matching this repo's
       established exam-scope discipline; the one gray area (`web-recon.sh --nuclei-full`) is gated
       behind an explicit opt-in flag and warning banner rather than being default behavior.
 

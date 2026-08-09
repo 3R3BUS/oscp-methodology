@@ -44,7 +44,8 @@ fi
 
 for tool in whatweb feroxbuster ffuf curl; do
     if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "[!] $tool not found -- some stages will be skipped. See CHEATSHEET.md §2 for install notes." >&2
+        echo "[!] $tool not found -- some stages will be skipped." >&2
+        echo "    Install: sudo apt install whatweb feroxbuster ffuf curl   (nuclei: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest)" >&2
     fi
 done
 

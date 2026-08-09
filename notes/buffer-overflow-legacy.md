@@ -87,7 +87,7 @@ s.close()
 ```
 Set up a listener before firing: `nc -lvnp 4444`.
 
-> **Exam note:** on the real OSCP exam, Metasploit/Meterpreter (including `multi/handler`) may be used against only **one** non-AD machine for the entire exam, and never to pivot. `msfconsole -x "use exploit/multi/handler; set payload windows/shell_reverse_tcp; set LHOST ...; run"` is a valid alternative listener, but treat it as reference-only for that single permitted target — standardize on plain `nc -lvnp` for every other box, including all community practice targets in this doc.
+> **Exam note:** on the real OSCP exam, Metasploit *modules* and Meterpreter may be used against only **one** non-AD machine for the entire exam, and never to pivot. `msfvenom` payload generation and `exploit/multi/handler` used as a plain listener (catching a non-Meterpreter payload such as `windows/shell_reverse_tcp`) are **exempt from that limit** — see [`notes/metasploit-framework-guide.md`](metasploit-framework-guide.md) for the full policy. `nc -lvnp` remains the simpler default for community practice targets in this doc.
 
 ---
 

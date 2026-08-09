@@ -7,10 +7,11 @@
 
 # hashcat_extra_flags <mode>
 # Prints any extra hashcat flags that a given mode's on-disk format requires, or nothing.
-# Some formats carry a leading identifier field that hashcat only tolerates with --username:
-#   31300 (Timeroast) -- timeroast.py emits "<RID>:$sntp-ms$<hash>$<salt>"
-#   1000/3000 from pwdump/secretsdump -- "user:rid:lmhash:nthash:::"
-# Without the flag hashcat rejects the line outright, so every emitted command must include it.
+# Currently only Timeroast (31300) needs one: timeroast.py emits "<RID>:$sntp-ms$<hash>$<salt>", and
+# hashcat rejects that line unless --username tells it to skip the leading RID field.
+# pwdump/secretsdump input ("user:rid:lmhash:nthash:::") is NOT handled here -- --username alone does
+# not make hashcat parse it, because three fields precede the NT hash. That case is flagged via
+# HASH_IS_PWDUMP and resolved by extracting the NT column (see CHEATSHEET.md 4.1 and crack.sh).
 hashcat_extra_flags() {
     case "$1" in
         31300) echo "--username" ;;

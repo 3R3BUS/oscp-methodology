@@ -2,7 +2,7 @@
 
 Metasploit is restricted to **one machine** on the OSCP exam — but on that one machine it's the most efficient tool available. Know the workflow cold so you don't waste time fumbling with it under pressure.
 
-> **Exam restriction (2026):** You may use Metasploit modules (exploit, auxiliary, post) and Meterpreter on exactly one standalone target. The AD set is off-limits for Metasploit. `msfvenom` for payload generation is unrestricted on all targets. `multi/handler` as a plain listener (catching non-Meterpreter shells) is unrestricted. See [`EXAM-TIPS.md`](../EXAM-TIPS.md) §2 for the full policy.
+> **Exam restriction (2026):** You may use Metasploit modules (exploit, auxiliary, post) and Meterpreter on exactly one standalone target. The AD set is off-limits for Metasploit. `msfvenom` for payload generation is unrestricted on all targets. `multi/handler` as a plain listener (catching non-Meterpreter shells) is unrestricted. See [`EXAM-TIPS.md`](../EXAM-TIPS.md) "Do This / Avoid This" and [`notes/enum-automation-frameworks.md`](enum-automation-frameworks.md) §"OSCP Exam Automation & AI Tool Policy" for the restricted-tool list this sits in.
 
 ## 1. msfconsole Basics
 

@@ -288,8 +288,9 @@ making them trivially reversible by any domain user. `SYSVOL` is readable by all
 users by design.
 
 **Impact.** Any domain user can recover the cleartext password for `<account>`, which held
-`<privilege>`. This is a fully unauthenticated-to-domain-user escalation requiring only a valid
-domain account and no exploitation.
+`<privilege>`. This is a domain-user-to-`<privilege>` escalation requiring only a valid domain
+account and no exploitation — any authenticated user in the domain can perform it, with no
+vulnerability to exploit and nothing to crack.
 
 **Remediation.** Delete the offending GPP file from `SYSVOL` and rotate the exposed account's
 password immediately. Microsoft removed the ability to set passwords via GPP in MS14-025; audit
@@ -368,10 +369,18 @@ authority is misconfigured (`<ESC1: permits requester-supplied subject alternati
 client-authentication EKU and enrollment permitted to low-privileged users / ESC8: the CA web
 enrollment endpoint accepts NTLM authentication without channel binding / etc.>`).
 
-**Impact.** Any `<domain user / machine account>` can obtain a certificate authenticating as an
-arbitrary domain principal, including Domain Administrators. Because the resulting authentication is
-cryptographically valid, it succeeds regardless of the target account's password, survives password
-rotation, and is difficult to distinguish from legitimate certificate use.
+**Impact.** *(Use the branch matching the ESC you actually demonstrated — the mechanisms differ.)*
+
+- **ESC1 / ESC6 (requester-supplied subject).** Any `<domain user>` permitted to enrol can request a
+  certificate naming an *arbitrary* domain principal as its subject, including Domain Administrators.
+- **ESC8 (NTLM relay to web enrolment).** An attacker who can coerce authentication from a privileged
+  host relays it to the CA's HTTP enrolment endpoint and obtains a certificate for **that coerced
+  principal specifically** — not an arbitrary one. Typically the domain controller's machine account,
+  which is sufficient for DCSync.
+
+In both cases the resulting authentication is cryptographically valid, so it succeeds regardless of
+the target account's password, survives password rotation, and is difficult to distinguish from
+legitimate certificate use.
 
 **Remediation.** `<Remove the ENROLLEE_SUPPLIES_SUBJECT flag from <template> / require manager
 approval for issuance / restrict enrollment permissions to accounts that require them / enable

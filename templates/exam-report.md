@@ -13,6 +13,8 @@
 
 # Offensive Security Certified Professional Exam Report
 
+## 1. Title / Cover Page
+
 **Candidate:** <Full Name>
 **OSID:** <OS-XXXXX>
 **Exam date:** <YYYY-MM-DD>
@@ -21,7 +23,7 @@
 
 ---
 
-## 1. Disclaimer / Scope
+## 2. Disclaimer / Scope
 
 > Take this verbatim from the official template rather than rewriting it. The paragraph below is a
 > placeholder to remind you the section exists — replace it with the template's own wording.
@@ -33,7 +35,7 @@ an engagement against a production or client environment.
 
 ---
 
-## 2. Executive Summary
+## 3. Executive Summary
 
 > **Audience: a manager who has never run nmap.** No CVE IDs. No tool names as the focus. No command
 > output. No port numbers. If you deleted every technical token and it stopped making sense, it is
@@ -48,8 +50,13 @@ the results to a standard that permits independent reproduction.
 
 <N> of <N> hosts were compromised. On <N> of these, the highest level of administrative control was
 obtained. Within the Active Directory environment, a chain of weaknesses permitted escalation from a
-standard domain user account to full domain administrative control — meaning complete authority over
-every user, computer, and resource in the domain.
+standard domain user account to <full domain administrative control — meaning complete authority
+over every user, computer, and resource in the domain / administrative control of <N> of <N> domain
+systems>.
+
+> Delete the domain sentence entirely if you did not attempt or did not progress in the AD set, and
+> claim only what you demonstrated — partial AD credit is normal under the post-Nov-2024 model, and
+> an unearned Domain Admin claim in the paragraph the grader reads first is a credibility problem.
 
 The most significant issues identified were <plain-English one-liners: "software running with known
 public flaws that had not been updated", "accounts protected by easily guessed passwords",
@@ -59,10 +66,10 @@ recommendations follow.
 
 ---
 
-## 3. High-Level Findings Summary
+## 4. High-Level Findings Summary
 
 > Bridge between the exec summary and the technical detail. A manager skims this; a technical
-> reviewer uses it as an index. Severities here **must** match §5.
+> reviewer uses it as an index. Severities here **must** match §6.
 
 | # | Host | Finding | Severity | Remediation summary |
 |---|---|---|---|---|
@@ -72,7 +79,7 @@ recommendations follow.
 
 ---
 
-## 4. Methodology
+## 5. Methodology
 
 > **Process, not targets.** Describe your approach once, at the conceptual level. This is where you
 > show you followed a repeatable method rather than got lucky. A paragraph per phase. No IPs here.
@@ -96,13 +103,13 @@ lateral movement <...>
 
 ---
 
-## 5. Detailed Findings
+## 6. Detailed Findings
 
 > One subsection per host, same skeleton every time. Full command output. Every screenshot captioned
 > with what it proves. See `templates/finding-blocks.md` for pre-written description/impact/
 > remediation prose for common findings.
 
-### 5.1 `<IP>` — `<hostname>` — <OS / role>
+### 6.1 `<IP>` — `<hostname>` — <OS / role>
 
 **Severity:** <Critical/High/Medium/Low>
 **Result:** <root / SYSTEM / Domain Admin / low-privilege only>
@@ -174,13 +181,13 @@ $ <cat/type command with full original path>
 
 ---
 
-### 5.2 `<IP>` — `<hostname>` — <OS / role>
+### 6.2 `<IP>` — `<hostname>` — <OS / role>
 
-<Repeat the 5.1 skeleton verbatim. Same headings, same order, every host.>
+<Repeat the 6.1 skeleton verbatim. Same headings, same order, every host.>
 
 ---
 
-## 6. Active Directory — Attack Path
+## 7. Active Directory — Attack Path
 
 > Only if the AD set was attempted. The per-host sections above cover each machine; this section is
 > the glue that makes them read as one chain instead of three disconnected compromises. Built from
@@ -189,7 +196,7 @@ $ <cat/type command with full original path>
 **Domain:** `<domain.local>`  **Starting position:** <provided credential / unauthenticated>
 **End state:** <Domain Admin / partial>
 
-### 6.1 Path summary
+### 7.1 Path summary
 
 ```
 <domain user>
@@ -200,25 +207,25 @@ $ <cat/type command with full original path>
                            └─► <DC> : <technique> → Domain Admin
 ```
 
-### 6.2 Narrative
+### 7.2 Narrative
 
 <One paragraph per hop, in order. Each paragraph names the credential/artifact carried forward and
-cross-references the per-host section where the underlying detail lives (§5.x).>
+cross-references the per-host section where the underlying detail lives (§6.x).>
 
-### 6.3 Domain compromise proof
+### 7.3 Domain compromise proof
 
 **Figure N — Domain Administrator context on the domain controller.**
 `<screenshot>`
 
 ---
 
-## 7. Conclusion
+## 8. Conclusion
 
 > Short. Mirrors the exec summary's tone and audience. Aggregate risk plus top priorities.
 
 The examination environment contained multiple weaknesses that, individually and in combination,
-permitted complete compromise of <N> of <N> hosts and full administrative control of the
-`<domain.local>` domain. The underlying causes cluster into <N> themes: <unpatched software /
+permitted complete compromise of <N> of <N> hosts and <full administrative control of the
+`<domain.local>` domain / administrative access to <N> systems within the `<domain.local>` domain>. The underlying causes cluster into <N> themes: <unpatched software /
 weak credentials / excessive privilege / credentials stored in readable locations>.
 
 Prioritized recommendations:
@@ -229,10 +236,10 @@ Prioritized recommendations:
 
 ---
 
-## 8. Appendix
+## 9. Appendix
 
-> Anything too long to inline without breaking §5's flow. Full linPEAS dumps, full nmap output where
-> §5 showed a trimmed table, custom scripts you wrote, wordlists you generated.
+> Anything too long to inline without breaking §6's flow. Full linPEAS dumps, full nmap output where
+> §6 showed a trimmed table, custom scripts you wrote, wordlists you generated.
 
 ### A. Full scan output — `<IP>`
 

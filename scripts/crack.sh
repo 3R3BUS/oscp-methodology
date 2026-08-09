@@ -115,10 +115,14 @@ if [[ -d "$TARGET_PATH" ]]; then
         FOUND=1
         crack_one "$f"
     done < <(find "$TARGET_PATH" -maxdepth 1 -type f \( -name '*.hash' -o -name '*hashes*' \) -print0)
-    [[ $FOUND -eq 0 ]] && echo "[!] No *.hash files found directly under $TARGET_PATH" >&2
+    if [[ $FOUND -eq 0 ]]; then
+        echo "[!] No *.hash files found directly under $TARGET_PATH" >&2
+    fi
 elif [[ -f "$TARGET_PATH" ]]; then
     crack_one "$TARGET_PATH"
 else
     echo "[!] Not a file or directory: $TARGET_PATH" >&2
     exit 1
 fi
+
+exit 0

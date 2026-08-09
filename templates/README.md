@@ -9,7 +9,7 @@ OffSec grades against their document, so start from theirs and use these to fill
 | [`target-note.md`](target-note.md) | One copy per target, opened the moment you start enumerating | Exam day, live |
 | [`ad-set-note.md`](ad-set-note.md) | The AD chain as a whole — credential ledger, host map, path tracking | Exam day, live |
 | [`exam-report.md`](exam-report.md) | The full report skeleton, section by section | Write-up window |
-| [`finding-blocks.md`](finding-blocks.md) | Pre-written description + impact + remediation prose for ~20 common OSCP findings | Write-up window |
+| [`finding-blocks.md`](finding-blocks.md) | Pre-written description + impact + remediation prose for 22 common OSCP findings | Write-up window |
 | [`evidence-checklist.md`](evidence-checklist.md) | Per-target "can I still submit this?" gate | Before you leave each box |
 
 ## How these fit together
@@ -17,7 +17,7 @@ OffSec grades against their document, so start from theirs and use these to fill
 ```
 Exam day                                    Write-up window (24h)
 ────────────────────────────────────────    ─────────────────────────────────
-target-note.md   ×5  ──┐
+target-note.md   ×6  ──┐
 ad-set-note.md   ×1  ──┼──►  evidence-checklist.md  ──►  exam-report.md
 terminal logs        ──┤          (gate)                      ▲
 screenshots/         ──┘                                      │

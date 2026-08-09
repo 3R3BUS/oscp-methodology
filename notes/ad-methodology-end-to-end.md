@@ -58,14 +58,22 @@ first (Kerbrute against a generated username list, RID cycling, or an LDAP anony
 build a valid user list; then **AS-REP roasting that list** with no password required, since it costs
 nothing to try and instantly yields crackable hashes for any account with Kerberos pre-auth disabled;
 then, only if AS-REP roasting comes up empty, a **careful password spray** (one or two passwords across
-the whole user list, respecting lockout thresholds) using seasonal/company-pattern guesses. Run
-**Responder** and **mitm6** passively in the background throughout this phase regardless of what else
-you're doing — LLMNR/NBT-NS poisoning and IPv6 DNS takeover cost nothing to leave running and often
-hand you a crackable Net-NTLMv2 hash (or a relay target) while you're doing other enumeration. Success
+the whole user list, respecting lockout thresholds) using seasonal/company-pattern guesses. Success
 here looks like: one valid credential, one cracked AS-REP hash, or one captured/relayed NTLM hash —
 any one of these gets you back to Stage 1. See
 [`notes/password-attacks-advanced.md`](password-attacks-advanced.md) for the Kerbrute enumeration/spray
-syntax, the AS-REP roasting sweep, and the Responder/mitm6 setup.
+syntax and the AS-REP roasting sweep.
+
+> **Responder / mitm6 are NOT exam-safe.** Most AD guides — including earlier revisions of this file —
+> tell you to leave Responder and mitm6 poisoning in the background throughout this phase. That advice
+> is correct for labs, HTB, and real engagements, and wrong for the OSCP exam: LLMNR/NBT-NS poisoning
+> and IPv6 DNS/WPAD takeover are name-resolution **spoofing**, which OffSec's restricted-tool list
+> prohibits outright ("spoofing (IP, ARP, DNS, NBNS, etc.)"). Because the usual advice is to run them
+> *passively in the background*, this is unusually easy to do without thinking about it. Keep them for
+> practice; on exam day the unauthenticated fallback is username enumeration → AS-REP roast →
+> careful spray → Timeroast. See [`EXAM-TIPS.md`](../EXAM-TIPS.md) "Avoid this" and
+> [`notes/password-attacks-advanced.md`](password-attacks-advanced.md) for the same caveat at the
+> command level.
 
 ### Timeroasting (fully unauthenticated, costs ~10 seconds)
 
@@ -386,7 +394,8 @@ Keyed off what you currently hold. Jump to the stage number for the full guidanc
   → Stage 1 (LDAP enum + BloodHound collection), then Stage 3 (read the graph before acting).
 
 - **No credential at all (fully unauthenticated)**
-  → Stage 2 (user enum → AS-REP roast → spray, Responder/mitm6 running throughout).
+  → Stage 2 (user enum → AS-REP roast → careful spray → Timeroast). Responder/mitm6 are
+    lab-only — they are spoofing, which the exam prohibits.
 
 - **A BloodHound graph but no clear next move**
   → Stage 3 (path analysis) — mark Owned, run the built-in queries, prioritize by edge reliability.

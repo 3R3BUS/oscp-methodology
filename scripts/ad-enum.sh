@@ -163,7 +163,13 @@ USERS_FILE="$OUT/users.txt"
     # yield RIDs, not usernames.
     [[ -f "$OUT/enum4linux.json" ]] && command -v jq >/dev/null 2>&1 && \
         jq -r '.users // {} | .[]?.username // empty' "$OUT/enum4linux.json" 2>/dev/null
-    [[ -f "$OUT/rid-brute.log" ]] && grep -oP '(?<=\\)[A-Za-z0-9._-]+(?=\s)' "$OUT/rid-brute.log" 2>/dev/null
+    # Anchor on "(SidTypeUser)" -- --rid-brute resolves every SID the DC will answer for, so an
+    # unanchored match also captures groups/aliases, truncated at their first space ("Domain Admins"
+    # -> "Domain"). Machine accounts are SidTypeUser too but end in '$' and are useless for spraying,
+    # so drop them as well.
+    [[ -f "$OUT/rid-brute.log" ]] && \
+        grep -oP '(?<=\\)[^()]+?(?=\s+\(SidTypeUser\))' "$OUT/rid-brute.log" 2>/dev/null \
+        | sed 's/[[:space:]]*$//' | grep -v '\$$'
     # nxc ldap --users prints "<module> <host> <port> <hostname> <sAMAccountName><pad>..." -- take
     # the 5th whitespace-delimited field, skipping the "-Username-" header and "[*] Enumerated..."
     # status lines it also writes to the same log.

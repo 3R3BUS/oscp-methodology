@@ -90,7 +90,7 @@ write-up window — the skeleton itself should live in your note-taking tool fro
 ## 2. Exam-Day Note Capture → Report Pipeline
 
 [`EXAM-TIPS.md`](../EXAM-TIPS.md) §3 already covers the hard rules — proof-file interactive-shell
-requirement, IP-verification-in-frame, screenshot-everything, don't rely on shell history. This section
+requirement, IP-verification-in-frame, capture-as-you-go, don't rely on shell history. This section
 is the workflow layer on top of those rules: how to organize captures *as you take them* so assembling
 the report is a copy-paste-and-clean-up pass, not a research project against your own scrollback.
 
@@ -449,8 +449,10 @@ Ranked by how often it bites, from community post-mortems and OffSec's stated re
 8. **Wrong submission format.** PDF-in-`.7z`, current naming convention — verify against the live
    exam guide, since OffSec updates submission mechanics independently of the scoring model.
 
-Note that items 1, 2, 5, and 8 are *pure process* — they cost nothing technically and are entirely
-preventable by the gate in [`templates/evidence-checklist.md`](../templates/evidence-checklist.md).
+Note that items 1, 2, and 5 are *pure process* — they cost nothing technically and are entirely
+preventable by the gate in [`templates/evidence-checklist.md`](../templates/evidence-checklist.md),
+which is per-target. Item 8 is a submission-mechanics check, covered by the Document mechanics
+block in §4 rather than by the per-target gate.
 
 ---
 

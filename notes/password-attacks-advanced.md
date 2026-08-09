@@ -83,6 +83,14 @@ nxc smb 10.10.10.0/24 -u user -H aad3b435b51404eeaad3b435b51404ee:9e730375b7cbce
 
 ## Responder / mitm6 — network hash capture (LLMNR/NBT-NS/mDNS + IPv6 DNS takeover)
 
+> ⛔ **BANNED ON THE OSCP EXAM.** Both tools work by answering name-resolution queries on behalf of
+> another host — that is **spoofing**, which OffSec's restricted-tool list prohibits explicitly
+> ("spoofing (IP, ARP, DNS, NBNS, etc.)"). This section is for **labs, HTB, and authorized real
+> engagements only**. The trap is that the standard advice everywhere is to leave these running
+> passively in the background, so it is easy to violate the rule without a deliberate decision.
+> On exam day the unauthenticated path is: username enumeration → AS-REP roast → careful spray →
+> Timeroast. See [`EXAM-TIPS.md`](../EXAM-TIPS.md) "Avoid this".
+
 Captures Net-NTLMv2 challenge/response hashes from broadcast name-resolution traffic without needing any prior credential — often the very first crackable hash on an internal AD assessment.
 ```bash
 # Responder — poison LLMNR/NBT-NS/mDNS, log Net-NTLMv2 to /usr/share/responder/logs/
