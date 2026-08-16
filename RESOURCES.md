@@ -89,7 +89,9 @@ to **authorized** penetration testing education and OSCP exam preparation.
 - **Buffer overflow is no longer a scored exam objective** (removed in the 2023 PEN-200 update —
   see §9). It's still taught in the course for foundational skill-building.
 - **OSCP+ credential:** passing now issues both the lifetime **OSCP** certification and a separate
-  **OSCP+** designation that expires 3 years from issuance — see [`EXAM-TIPS.md`](EXAM-TIPS.md) §2.
+  **OSCP+** designation that expires 3 years from issuance (renewable via CPE credits, recert exam,
+  or a qualifying OffSec certification such as OSEP/OSWE/OSED/OSDA/OSAI+; annual maintenance fee
+  applies) — see [`EXAM-TIPS.md`](EXAM-TIPS.md) §2 for details.
 
 ---
 
