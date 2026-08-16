@@ -47,7 +47,7 @@ explains the rating logic; this one just gives you the words.
 
 ## 1. Unauthenticated Remote Code Execution
 
-**Severity:** Critical
+**Severity:** Critical (if escalated to root/SYSTEM); High (if limited to a low-privilege service account)
 
 **Description.** The `<service>` service running on port `<port>` of `<IP>` is affected by
 `<CVE-XXXX-XXXXX / vulnerability class>`, which permits an unauthenticated remote attacker to execute
@@ -364,10 +364,12 @@ domain-tier control.
 
 **Severity:** Critical
 
-**Description.** The certificate template `<template name>` published by the `<CA name>` certification
-authority is misconfigured (`<ESC1: permits requester-supplied subject alternative name with a
-client-authentication EKU and enrollment permitted to low-privileged users / ESC8: the CA web
-enrollment endpoint accepts NTLM authentication without channel binding / etc.>`).
+**Description.** The `<CA name>` Active Directory Certificate Services deployment is misconfigured
+(`<ESC1: the certificate template "<template name>" permits requester-supplied subject alternative
+name with a client-authentication EKU and enrollment permitted to low-privileged users / ESC6: the
+CA-level EDITF_ATTRIBUTESUBJECTALTNAME2 registry flag is enabled, allowing any enrollee to specify an
+arbitrary SAN regardless of template settings / ESC8: the CA web enrollment endpoint accepts NTLM
+authentication without channel binding, enabling relay attacks / etc.>`).
 
 **Impact.** *(Use the branch matching the ESC you actually demonstrated — the mechanisms differ.)*
 

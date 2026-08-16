@@ -74,8 +74,12 @@ GUI-only evidence; there is no text-log equivalent. File: `~/exam/ad/bloodhound-
 
 ## Domain compromise proof
 
+> This section is the canonical DA proof capture for the AD set. The DC's own `target-note.md` copy
+> covers the DC as an individual host (its local foothold, privesc, proof.txt); the DA-level proof
+> here covers the domain-wide compromise and lives only in this file.
+
 📷 **SCREENSHOT — DA context** — `whoami /groups` showing Domain Admins membership, on the DC,
-with IP visible. File: `~/exam/ad/da-proof.png`
+with command + output + `whoami` + hostname + IP all in one frame. File: `~/exam/ad/da-proof.png`
 
 **DC proof.txt**
 

@@ -72,10 +72,11 @@ another host in the chain), and the end state (low-priv shell / root-SYSTEM / DA
   - Exact command(s) run, full output, and the resulting shell/access level.
   - Proof-of-foothold screenshot (command + output + `whoami`/`id` + hostname + target IP in one frame
     — see [`EXAM-TIPS.md`](../EXAM-TIPS.md) §3 for the exact composition rule; not re-derived here).
+  - local.txt screenshot — capture it now, while you have the initial shell, not after privesc.
 
 **Privilege Escalation**
   - Enumeration that surfaced the privesc vector, the exploitation command, full output.
-  - proof.txt/local.txt screenshot, same composition rule.
+  - proof.txt screenshot, same composition rule.
 
 **Post-Exploitation / Loot** (if applicable)
   - Credentials harvested, files of interest, anything that fed into another host's compromise —
