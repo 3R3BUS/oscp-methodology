@@ -195,8 +195,8 @@ ffuf -u http://<target>/login -X POST \
 ### Directories / files (web content)
 ```
 /usr/share/seclists/Discovery/Web-Content/common.txt
-/usr/share/seclists/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-medium.txt
-/usr/share/seclists/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-small.txt
+/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt
+/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-small.txt
 /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
 /usr/share/seclists/Discovery/Web-Content/raft-medium-files.txt
 /usr/share/seclists/Discovery/Web-Content/big.txt

@@ -2,7 +2,7 @@
 
 > **Scope:** HTA payloads, VBA macros, OLE object embedding, Windows Library files, and basic phishing pretexts. These require the target to open/execute a file — the attacker delivers, the user detonates.
 >
-> **Exam note:** client-side attacks are legitimate OSCP technique on standalone machines. msfvenom payload generation is fine; the Metasploit *handler* counts toward the one-machine limit only if you use `multi/handler` with a meterpreter payload (a plain `nc` listener catching a `shell_reverse_tcp` does not).
+> **Exam note:** client-side attacks are legitimate OSCP technique on standalone machines. msfvenom payload generation is unrestricted. `multi/handler` catching a non-Meterpreter payload (e.g. `shell_reverse_tcp`) is also generally considered unrestricted; only Meterpreter sessions count toward the one-machine Metasploit limit. See [`metasploit-framework-guide.md`](metasploit-framework-guide.md) for full details.
 >
 > See also: [`notes/file-transfer-matrix.md`](file-transfer-matrix.md) for staging/delivery methods.
 

