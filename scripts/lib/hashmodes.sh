@@ -52,7 +52,9 @@ detect_hash_mode() {
         '$krb5tgs$17$'*)   _hm_set 19600 "Kerberos 5 TGS-REP etype 17 (AES128 Kerberoast)"; return ;;
         '$krb5tgs$18$'*)   _hm_set 19700 "Kerberos 5 TGS-REP etype 18 (AES256 Kerberoast)"; return ;;
         '$krb5asrep$23$'*) _hm_set 18200 "Kerberos 5 AS-REP etype 23 (AS-REP Roast)"; return ;;
-        '$krb5pa$'*)       _hm_set 7500  "Kerberos 5 AS-REQ Pre-Auth etype 23"; return ;;
+        '$krb5pa$23$'*)    _hm_set 7500  "Kerberos 5 AS-REQ Pre-Auth etype 23"; return ;;
+        '$krb5pa$17$'*)    _hm_set 19800 "Kerberos 5 AS-REQ Pre-Auth etype 17 (AES128)"; return ;;
+        '$krb5pa$18$'*)    _hm_set 19900 "Kerberos 5 AS-REQ Pre-Auth etype 18 (AES256)"; return ;;
         *'$sntp-ms$'*)     _hm_set 31300 "MS-SNTP (Timeroast) -- needs --username, the RID is a leading field"; return ;;
         '$2a$'*|'$2b$'*|'$2y$'*) _hm_set 3200 "bcrypt"; return ;;
         '$1$'*)            _hm_set 500   'md5crypt ($1$, Unix)'; return ;;
