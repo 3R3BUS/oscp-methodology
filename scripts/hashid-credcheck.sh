@@ -31,7 +31,7 @@ case "$SUBCMD" in
             echo "[*] Reading hashes from file: $INPUT"
             declare -A MODES_SEEN=()
             SAW_PWDUMP=0
-            while IFS= read -r line; do
+            while IFS= read -r line || [[ -n "$line" ]]; do
                 [[ -z "$line" ]] && continue
                 # Direct call, not command substitution -- a "$(...)" subshell would discard the
                 # HASH_IS_PWDUMP flag before the loop could accumulate it.
@@ -112,6 +112,7 @@ case "$SUBCMD" in
                 echo "  *** (Pwn3d!) admin-equivalent access on $proto -- prioritize this ***"
             fi
         done
+        exit 0
         ;;
 
     *)

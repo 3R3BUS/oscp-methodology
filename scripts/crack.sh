@@ -44,9 +44,6 @@ if ! command -v hashcat >/dev/null 2>&1; then
     exit 1
 fi
 
-if [[ "$WORDLIST" == "--rules" ]]; then
-    WORDLIST="/usr/share/wordlists/rockyou.txt"
-fi
 if [[ ! -f "$WORDLIST" ]]; then
     echo "[!] Wordlist not found: $WORDLIST (default is rockyou.txt -- gunzip it first if needed)" >&2
     exit 1

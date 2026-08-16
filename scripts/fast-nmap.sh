@@ -111,3 +111,4 @@ fi
 echo "==========================================================="
 echo "[*] Full raw output saved under: $OUT/"
 [[ -f "$OUT/vuln.nmap" ]] && echo "[*] Check $OUT/vuln.nmap for --script vuln findings."
+exit 0
