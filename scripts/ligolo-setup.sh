@@ -26,10 +26,17 @@ TUN_NAME="ligolo"
 TEARDOWN=0
 for ((_i=1; _i<=$#; _i++)); do
     case "${!_i}" in
-        --name)     _j=$((_i+1)); TUN_NAME="${!_j:-ligolo}" ;;
+        --name)     _j=$((_i+1)); [[ -n "${!_j:-}" && "${!_j:0:1}" != "-" ]] && TUN_NAME="${!_j}" ;;
         --teardown) TEARDOWN=1 ;;
     esac
 done
+# Validate the interface name once, for both teardown and setup, before it's used to build state-file
+# paths or passed to `ip`. Linux IFNAMSIZ caps interface names at 15 chars; reject bad names up front
+# (also catches `--name` given a flag as its value, e.g. `--name --teardown`, which leaves the default).
+if ! [[ "$TUN_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,14}$ ]]; then
+    echo "[!] Invalid interface name '$TUN_NAME' (--name): 1-15 chars, start alphanumeric, [A-Za-z0-9_-] only." >&2
+    exit 1
+fi
 PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-proxy-${TUN_NAME}.pid"
 SERVE_PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-serve-${TUN_NAME}.pid"
 SERVE_DIR_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-serve-${TUN_NAME}.dir"
@@ -48,7 +55,10 @@ if [[ $TEARDOWN -eq 1 ]]; then
     [[ $EUID -ne 0 ]] && command -v sudo >/dev/null 2>&1 && KILL_PREFIX="sudo"
     if [[ -f "$PID_FILE" ]]; then
         PID="$(cat "$PID_FILE")"
-        if [[ -n "$PID" ]] && $KILL_PREFIX kill -0 "$PID" 2>/dev/null; then
+        if [[ -n "$PID" ]] && $KILL_PREFIX kill -0 "$PID" 2>/dev/null \
+           && ps -o args= -p "$PID" 2>/dev/null | grep -q 'proxy -selfcert'; then
+            # Verify the PID is still OUR proxy before SIGTERM -- a freed PID can be recycled to an
+            # unrelated (root) process, and killing that would be a nasty surprise.
             echo "[*] Killing proxy process (pid $PID)"
             $KILL_PREFIX kill "$PID"
         else
@@ -72,7 +82,8 @@ if [[ $TEARDOWN -eq 1 ]]; then
     # Agent file server (unprivileged, ours).
     if [[ -f "$SERVE_PID_FILE" ]]; then
         SPID="$(cat "$SERVE_PID_FILE")"
-        if [[ -n "$SPID" ]] && kill -0 "$SPID" 2>/dev/null; then
+        if [[ -n "$SPID" ]] && kill -0 "$SPID" 2>/dev/null \
+           && ps -o args= -p "$SPID" 2>/dev/null | grep -q 'http\.server'; then
             echo "[*] Stopping agent file server (pid $SPID)"
             kill "$SPID"
         fi
@@ -135,10 +146,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if ! [[ "$LISTEN_PORT" =~ ^[0-9]+$ ]] || (( LISTEN_PORT < 1 || LISTEN_PORT > 65535 )); then
+# 10# forces base-10 so a leading-zero port (e.g. 019) isn't parsed as octal, which would otherwise
+# throw an arithmetic error and slip past this guard.
+if ! [[ "$LISTEN_PORT" =~ ^[0-9]+$ ]] || (( 10#$LISTEN_PORT < 1 || 10#$LISTEN_PORT > 65535 )); then
     echo "[!] --port must be a number between 1 and 65535 (got '$LISTEN_PORT')." >&2
     exit 1
 fi
+LISTEN_PORT=$(( 10#$LISTEN_PORT ))   # normalize away any leading zeros for the rest of the script
 
 # ---------------------------------------------------------------------------
 # Locate the proxy binary
@@ -161,7 +175,15 @@ if ip link show "$TUN_NAME" >/dev/null 2>&1; then
     echo "[*] TUN interface '$TUN_NAME' already exists -- skipping creation."
 else
     echo "[*] Creating TUN device '$TUN_NAME'"
-    sudo ip tuntap add dev "$TUN_NAME" mode tun user "$(whoami)" && sudo ip link set "$TUN_NAME" up
+    if ! sudo ip tuntap add dev "$TUN_NAME" mode tun user "$(whoami)"; then
+        echo "[!] Failed to create TUN '$TUN_NAME' -- not a sudoer, the 'tun' module is missing, or the" >&2
+        echo "    name is unusable. Fix that before continuing; a proxy with no tunnel routes nothing." >&2
+        exit 1
+    fi
+    if ! sudo ip link set "$TUN_NAME" up; then
+        echo "[!] Created '$TUN_NAME' but could not bring it up. Aborting (the tunnel would not route)." >&2
+        exit 1
+    fi
 fi
 
 # Pre-stage kernel routes now (interface is up), so once you `start` in the console traffic flows with
