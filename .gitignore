@@ -1,0 +1,35 @@
+# Script output trees — scan data, harvested hashes, and loot. NEVER commit these:
+# they contain target-specific data (and on a real engagement, other people's secrets).
+*-out/
+fast-nmap-out/
+web-recon-out/
+ad-enum-out/
+privesc-launcher-out/
+
+# Harvested secrets / credential material produced mid-engagement
+*.hash
+*.ccache
+*.kirbi
+*.pfx
+*.ntds
+*.secrets
+*.potfile
+hashcat.potfile
+loot/
+bloodhound*.zip
+
+# Large third-party binaries you may drop in the repo dir but shouldn't commit
+proxy
+agent
+agent.exe
+*.rule
+linpeas.sh
+winPEAS*.exe
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/

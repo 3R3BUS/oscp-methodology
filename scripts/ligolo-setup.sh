@@ -33,6 +33,7 @@ done
 PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-proxy-${TUN_NAME}.pid"
 SERVE_PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-serve-${TUN_NAME}.pid"
 SERVE_DIR_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-serve-${TUN_NAME}.dir"
+PORT_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-port-${TUN_NAME}.port"
 SERVE_PORT_DEFAULT=8080
 
 # ---------------------------------------------------------------------------
@@ -56,10 +57,16 @@ if [[ $TEARDOWN -eq 1 ]]; then
         rm -f "$PID_FILE"
     fi
     # Belt-and-braces: the recorded PID is sudo's, and on older sudo (or a detached proxy) the SIGTERM
-    # may not reach the proxy child, orphaning it still bound to the listener. Sweep any that are left.
-    if command -v pgrep >/dev/null 2>&1 && pgrep -f 'proxy -selfcert -laddr' >/dev/null 2>&1; then
-        echo "[*] Sweeping a leftover ligolo proxy still holding the listener."
-        $KILL_PREFIX pkill -f 'proxy -selfcert -laddr' 2>/dev/null || true
+    # may not reach the proxy child, orphaning it still bound to the listener. Sweep ONLY this
+    # interface's proxy, matched by its recorded listen port, so a concurrent pivot is left running.
+    if [[ -f "$PORT_FILE" ]]; then
+        _port="$(cat "$PORT_FILE")"
+        if [[ -n "$_port" ]] && command -v pgrep >/dev/null 2>&1 \
+           && pgrep -f "proxy -selfcert -laddr 0.0.0.0:${_port}" >/dev/null 2>&1; then
+            echo "[*] Sweeping a leftover ligolo proxy on port ${_port}."
+            $KILL_PREFIX pkill -f "proxy -selfcert -laddr 0.0.0.0:${_port}" 2>/dev/null || true
+        fi
+        rm -f "$PORT_FILE"
     fi
 
     # Agent file server (unprivileged, ours).
@@ -137,7 +144,6 @@ fi
 # Locate the proxy binary
 # ---------------------------------------------------------------------------
 PROXY_BIN="./proxy"
-AGENT_HINT="agent"
 if ! command -v "$PROXY_BIN" >/dev/null 2>&1 && [[ ! -x "$PROXY_BIN" ]]; then
     if command -v proxy >/dev/null 2>&1; then
         PROXY_BIN="proxy"
@@ -281,4 +287,5 @@ echo "[*] Starting proxy on 0.0.0.0:${LISTEN_PORT} in the foreground -- Ctrl+C t
 # `exec` replaces this shell, so $$ becomes the PID of `sudo` (which forwards signals to its proxy child
 # on modern sudo). Teardown kills this PID, with a pkill sweep as a fallback for older sudo.
 echo "$$" > "$PID_FILE"
+echo "$LISTEN_PORT" > "$PORT_FILE"
 exec sudo "$PROXY_BIN" -selfcert -laddr "0.0.0.0:${LISTEN_PORT}"
