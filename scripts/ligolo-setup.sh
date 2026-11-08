@@ -5,10 +5,12 @@
 # agent binary over the VPN so getting it onto the pivot is a single wget/certutil line).
 #
 # Usage:
-#   ligolo-setup.sh [--route CIDR]... [--port N] [--serve [DIR]]
+#   ligolo-setup.sh [--route CIDR]... [--port N] [--serve [DIR]] [--name IFACE]
 #                               create the TUN, pre-stage routes, (optionally) serve the agent,
 #                               then start the proxy listener in the foreground.
-#   ligolo-setup.sh --teardown  remove the TUN interface, stop a proxy/file-server this script started.
+#   ligolo-setup.sh --teardown [--name IFACE]
+#                               remove the TUN interface, stop a proxy/file-server this script started.
+# --name lets a second hop use its own interface (e.g. --name ligolo2) with no script edit.
 #
 # Fast path (zero wasted time): if you already know the target's internal subnet from your first-box
 # recon, pass it with --route so the kernel route is in place before the proxy even starts -- then the
@@ -17,10 +19,16 @@
 #   ./ligolo-setup.sh --route 10.10.20.0/24 --serve
 set -uo pipefail
 
+# --name overrides the TUN interface name (a second, distinctly-named hop on a double pivot, so you
+# never edit this script). Pre-scanned here because teardown runs before the main arg parser, and the
+# pid/serve state files are namespaced per interface so two concurrent pivots don't clobber each other.
 TUN_NAME="ligolo"
-PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-proxy.pid"
-SERVE_PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-serve.pid"
-SERVE_DIR_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-serve.dir"
+for ((_i=1; _i<=$#; _i++)); do
+    if [[ "${!_i}" == "--name" ]]; then _j=$((_i+1)); TUN_NAME="${!_j:-ligolo}"; fi
+done
+PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-proxy-${TUN_NAME}.pid"
+SERVE_PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-serve-${TUN_NAME}.pid"
+SERVE_DIR_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-serve-${TUN_NAME}.dir"
 SERVE_PORT_DEFAULT=8080
 
 # ---------------------------------------------------------------------------
@@ -97,6 +105,10 @@ while [[ $# -gt 0 ]]; do
             else
                 shift
             fi ;;
+        --name)
+            # Already consumed by the pre-scan above into TUN_NAME; just skip it here.
+            [[ $# -lt 2 ]] && { echo "[!] --name requires an interface name, e.g. --name ligolo2" >&2; exit 1; }
+            shift 2 ;;
         -h|--help)
             sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)
@@ -227,8 +239,8 @@ echo "Catch a reverse shell FROM the internal net back through the pivot:"
 echo "  listener_add --addr 0.0.0.0:<pivot_port> --to 127.0.0.1:<local_catch_port> --tcp"
 echo "  then point your internal-host payload at <pivot_internal_ip>:<pivot_port>"
 echo
-echo "Second hop (double pivot): rerun with a different TUN name (edit TUN_NAME) for the"
-echo "second agent, start it on that session, and --route the next subnet through it."
+echo "Second hop (double pivot): rerun as  $0 --name ${TUN_NAME}2 --route <next_subnet>/24  for"
+echo "the second agent (no script edit needed); start it on that session."
 echo "=================================================================="
 echo
 echo "[*] Starting proxy on 0.0.0.0:${LISTEN_PORT} in the foreground -- Ctrl+C to stop, then '$0 --teardown'."

@@ -1759,7 +1759,7 @@ If MySQL is runnable via `sudo`, the `\!` meta-command shells out using the clie
 | `mysql` (official client) | Interactive/scripted DB connection and query execution |
 | `raptor_udf2.c` (Exploit-DB 1518) | Compiles to `do_system()` UDF for Linux root privesc |
 | `lib_mysqludf_sys` | Pre-built `sys_exec`/`sys_eval` UDF library |
-| `sqlmap --os-shell` | Automates UDF upload + OS shell over a SQLi/DB connection |
+| `sqlmap --os-shell` | Automates UDF upload + OS shell over a SQLi/DB connection. **⛔ Exam-banned** (SQLmap is named in the restricted list) — do the UDF upload by hand with the `raptor_udf2`/`lib_mysqludf_sys` rows above |
 | `hashcat` / `john` | Cracks `mysql.user` password hashes once dumped |
 
 ---
@@ -2056,7 +2056,7 @@ Where direct TCP access isn't available but an SSRF primitive supporting the `go
 
 | Service | Primary Client | Primary Escalation Tool | Key Native Primitive |
 |---|---|---|---|
-| MySQL | `mysql` | `raptor_udf2.c` / `lib_mysqludf_sys` / `sqlmap --os-shell` | `CREATE FUNCTION ... SONAME` (UDF) |
+| MySQL | `mysql` | `raptor_udf2.c` / `lib_mysqludf_sys` (⛔ not `sqlmap --os-shell` — exam-banned) | `CREATE FUNCTION ... SONAME` (UDF) |
 | MSSQL | `mssqlclient.py` (Impacket) | PowerUpSQL, built-in `xp_cmdshell` | `xp_cmdshell`, linked server `OPENQUERY`/`EXEC AT` |
 | Oracle | `sqlplus` | `odat` | `UTL_FILE`, `DBMS_XSLPROCESSOR`, `EXTERNALTABLE`, `--sysdba` |
 | PostgreSQL | `psql` | Metasploit `postgres_copy_from_program_cmd_exec` | `COPY ... FROM/TO PROGRAM` |

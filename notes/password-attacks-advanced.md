@@ -66,7 +66,7 @@ Neither `nxc` nor `kerbrute passwordspray` throttles multi-round spraying for yo
 
 ## Credential Reuse — Validate a Found Credential Across Services
 
-One valid credential (from a spray hit, roast, or Responder capture) is often reused on other listening services — check before committing to a single attack path. `nxc` supports all of these protocols with identical `-u`/`-p`/`-H` syntax, so a found cred is a one-liner-per-protocol away from a reuse map.
+One valid credential (from a spray hit, roast, or — in labs only, since Responder is exam-banned spoofing — a Responder capture) is often reused on other listening services — check before committing to a single attack path. `nxc` supports all of these protocols with identical `-u`/`-p`/`-H` syntax, so a found cred is a one-liner-per-protocol away from a reuse map.
 ```bash
 nxc smb    10.10.10.0/24 -u user -p 'Summer2026!'
 nxc winrm  10.10.10.0/24 -u user -p 'Summer2026!'   # (Pwn3d!) = admin-equivalent, evil-winrm next
@@ -160,8 +160,8 @@ john --wordlist=rockyou.txt --rules=OneRule hashes.txt
 |---|---|
 | Kerbrute | https://github.com/ropnop/kerbrute |
 | NetExec (nxc) | https://github.com/Pennyw0rth/NetExec (docs: https://www.netexec.wiki/) |
-| Responder | https://github.com/lgandx/Responder |
-| mitm6 | https://github.com/dirkjanm/mitm6 |
+| Responder | https://github.com/lgandx/Responder — ⛔ exam-banned (spoofing); lab/engagement only |
+| mitm6 | https://github.com/dirkjanm/mitm6 — ⛔ exam-banned (spoofing); lab/engagement only |
 | CrackMapExec (legacy, archived — do not use) | https://github.com/byt3bl33d3r/CrackMapExec |
 | THC-Hydra | https://github.com/vanhauser-thc/thc-hydra |
 | John the Ripper (jumbo) | https://github.com/openwall/john |

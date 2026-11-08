@@ -332,7 +332,7 @@ to **authorized** penetration testing education and OSCP exam preparation.
 | RockYou + SecLists passwords | https://github.com/danielmiessler/SecLists/tree/master/Passwords | Baseline wordlists for cracking campaigns. |
 | Hashcat rule-based attacks | https://hashcat.net/wiki/doku.php?id=rule_based_attack | Password mutation rule syntax (`best64.rule`, `dive.rule`). |
 | Hydra | https://github.com/vanhauser-thc/thc-hydra | Multi-service and HTTP POST-form online brute force. |
-| Responder | https://github.com/lgandx/Responder | LLMNR/NBT-NS/mDNS poisoning for hash capture. |
+| Responder | https://github.com/lgandx/Responder | LLMNR/NBT-NS/mDNS poisoning for hash capture. **⛔ Exam-banned — this is name-resolution spoofing; lab/engagement use only.** |
 | Crunch | (Kali default) | Pattern-based wordlist generation. |
 
 > **Deep-dive:** [`notes/password-attacks-advanced.md`](notes/password-attacks-advanced.md) covers password

@@ -45,7 +45,7 @@ nmap -p- -sC -sV -O -oA nmap-full <target>
 ```bash
 nmap -6 -p- -sC -sV -oA nmap-ipv6 <target-ipv6-address-or-scope-id>
 ```
-Same flags as IPv4 — just add `-6` and pass the IPv6 literal (link-local addresses need a zone/scope ID, e.g. `fe80::1%eth0`). Relevant mainly on AD segments where mitm6 is in play (`notes/password-attacks-advanced.md`) or a host is dual-stack; standalone OSCP boxes are IPv4 almost always.
+Same flags as IPv4 — just add `-6` and pass the IPv6 literal (link-local addresses need a zone/scope ID, e.g. `fe80::1%eth0`). Relevant mainly on dual-stack hosts; standalone OSCP boxes are IPv4 almost always. (mitm6-style IPv6 DNS takeover is **exam-banned spoofing** — see [`notes/password-attacks-advanced.md`](notes/password-attacks-advanced.md); this `-6` scan is just plain nmap over IPv6 and is fine.)
 
 ### UDP scan (top ports — full UDP is slow, scope common ports first)
 ```bash

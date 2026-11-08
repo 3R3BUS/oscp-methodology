@@ -1,17 +1,9 @@
 # NTLM/AD Coercion & Relay Techniques — OSCP-style Reference (Authorized AD Pentesting)
 
-## Repo Check: 3R3BUS/security-practitioners-guide
-
-**`content/resources/`** (~309 files) — scanned filenames and content for `coerce`, `relay`, `ntlm`, `petitpotam`, `printerbug`, `shadowcoerce`, `dfscoerce`. **None of PetitPotam, PrinterBug, ShadowCoerce, or DFSCoerce have a dedicated entry.** The closest hits are three metadata-only resource stubs (short YAML citation blocks, no technique write-up, no command examples):
-
-- `attack-t1557-001-ntlm-relay.md` — MITRE ATT&CK T1557.001 citation (LLMNR/NBT-NS poisoning + SMB relay), links to attack.mitre.org. No coercion-tool content.
-- `fortra-impacket.md` — citation for the impacket GitHub repo, notes it "implements much of the AD attack toolkit" including `ntlmrelayx`, but gives no usage/commands.
-- `shamir-wagging-the-dog-rbcd.md` — citation for Elad Shamir's RBCD research (eladshamir.com), metadata only.
-- `ldap-security-references.md` — a reference table (LDAP signing/CBT registry keys, event IDs) that lists `impacket ntlmrelayx.py` as a reference for "LDAP relay demonstration" but has no relay walkthrough.
-
-**`content/offsec/ptint/`** (4 files: `_index.md`, `local-privesc.md`, `network-pivoting.md`, `post-exploitation-enum.md`) — none cover coercion or NTLM relay. `post-exploitation-enum.md` documents BloodHound/PowerView/Certify/ESC1 enumeration and lists ESC8 in a one-line summary table ("NTLM relay to AD CS HTTP enrollment endpoint → DCSync") but has no PetitPotam/PrinterBug/coercion or `ntlmrelayx` command content. `network-pivoting.md` covers SSH/ligolo-ng/chisel tunnelling, unrelated to relay.
-
-**Conclusion: this is a genuine content gap in the repo** — coercion primitives and the full relay-to-LDAP/ADCS chain (which OSCP/CRTP-style exams frequently test) are not documented anywhere in `content/resources/` or `content/offsec/ptint/`. This file can serve as source material to fill that gap.
+*Coercion primitives (PetitPotam / PrinterBug / ShadowCoerce / DFSCoerce) and the full
+relay-to-LDAP/ADCS chain, which the OSCP AD set frequently tests. **Coercion is exam-legal** — forcing
+a host to authenticate to you is not spoofing; **name-resolution poisoning (Responder/mitm6) is banned**,
+so use a plain listener, not Responder's poisoning mode (the distinction is noted at each listener below).*
 
 ---
 
@@ -134,7 +126,7 @@ coercer coerce -t <TARGET_IP> -l <ATTACKER_IP> -u user -p pass -d domain.local
 
 ## NTLM Relay Chains via impacket `ntlmrelayx`
 
-**What/why:** `ntlmrelayx.py` (part of [fortra/impacket](https://github.com/fortra/impacket)) listens for incoming NTLM authentication (from a coercion primitive above, or from LLMNR/NBT-NS/mDNS poisoning via `Responder`, or IPv6 DNS takeover via `mitm6`) and **relays** it — without cracking the hash — to a *different* target/protocol that does not enforce SMB/LDAP signing or channel binding, performing an action as the victim identity. This is the step that turns a coercion primitive into privilege escalation.
+**What/why:** `ntlmrelayx.py` (part of [fortra/impacket](https://github.com/fortra/impacket)) listens for incoming NTLM authentication (on the exam, from a **coercion primitive above** — the exam-safe source; in labs also from LLMNR/NBT-NS/mDNS poisoning via `Responder` or IPv6 DNS takeover via `mitm6`, both of which are **exam-banned spoofing**) and **relays** it — without cracking the hash — to a *different* target/protocol that does not enforce SMB/LDAP signing or channel binding, performing an action as the victim identity. This is the step that turns a coercion primitive into privilege escalation.
 
 **Prerequisites (general):** target service does not enforce signing (SMB signing off) or, for LDAP/LDAPS, does not enforce LDAP signing / channel binding (CBT); the relay session must be single-use per authentication (SMB `refreshttl`, `-socks` for reuse); the coerced/poisoned identity must have meaningful privileges on the relay target (a DC machine account is the prime target since it has broad AD write rights and often domain-admin-equivalent enrollment rights on ADCS).
 

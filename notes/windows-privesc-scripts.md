@@ -361,7 +361,7 @@ runas /savecred /user:DOMAIN\admin cmd.exe
 ```
 
 ### 7e. Token Impersonation with Incognito
-**Explanation:** On multi-user systems, other logged-in users' access tokens persist in memory. Incognito (Meterpreter built-in, or standalone) can list and impersonate these tokens — if a Domain Admin has an active session on a host you've compromised, their token is stealable.
+**Explanation:** On multi-user systems, other logged-in users' access tokens persist in memory. Incognito can list and impersonate these tokens — if a Domain Admin has an active session on a host you've compromised, their token is stealable. **Exam note:** use the **standalone** `incognito.exe` below — the Meterpreter-built-in version would count toward your one allowed Metasploit machine (and is unusable on the AD set, which is excluded from that allowance). The standalone binary has no such restriction.
 ```cmd
 :: Standalone Incognito (from a SYSTEM or SeImpersonate shell)
 incognito.exe list_tokens -u                          :: list available delegation/impersonation tokens
