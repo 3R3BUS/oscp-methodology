@@ -17,6 +17,7 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`EXAM-TIPS.md`](EXAM-TIPS.md) (proctoring, time budgeting, documentation rules) ·
 [`MACHINES.md`](MACHINES.md) (this repo's own curated list of 107 OSCP-like HTB machines, matched to
 0xdf writeups and ippsec videos) ·
+[`notes/standalone-box-methodology.md`](notes/standalone-box-methodology.md) (sequenced walkthrough for the 3 standalone boxes) ·
 [`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md) ·
 [`notes/ad-assumed-breach-catalog.md`](notes/ad-assumed-breach-catalog.md) (dense every-method command sheet) ·
 [`notes/adcs-certipy-cheatsheet.md`](notes/adcs-certipy-cheatsheet.md) ·

@@ -16,6 +16,7 @@ the relevant note open and work down it.
 |---|---|
 | The exam-day rules, scoring, time budget, proctoring | [`EXAM-TIPS.md`](EXAM-TIPS.md) |
 | A fast command lookup across every phase | [`CHEATSHEET.md`](CHEATSHEET.md) |
+| **The standalone boxes** — what to do, in order, and why | [`notes/standalone-box-methodology.md`](notes/standalone-box-methodology.md) |
 | **The AD set** — what to do, in order, and why | [`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md) |
 | **The AD set** — every assumed-breach method as one-liners | [`notes/ad-assumed-breach-catalog.md`](notes/ad-assumed-breach-catalog.md) |
 | One command per repeatable workflow (recon, AD enum, pivot…) | [`scripts/README.md`](scripts/README.md) |
@@ -31,7 +32,7 @@ the relevant note open and work down it.
 ├── EXAM-TIPS.md       Exam rules, scoring, restricted tools, time strategy, proof requirements
 ├── RESOURCES.md       Tools, practice platforms, references, internal cross-reference index
 ├── MACHINES.md        Curated OSCP-like HTB/PG boxes matched to writeups
-├── notes/   (26 files) The methodology: recon → web → privesc → AD → pivoting → reporting
+├── notes/   (27 files) The methodology: recon → web → privesc → AD → pivoting → reporting
 ├── scripts/  (7 + lib) Bash helpers that enumerate/harvest and stop before the exploit decision
 └── templates/ (6 files) Paste-ready OSCP report skeleton, finding blocks, live-capture notes
 ```

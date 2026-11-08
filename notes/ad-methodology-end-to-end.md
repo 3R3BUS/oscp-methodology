@@ -14,6 +14,10 @@ follow each pointer for the actual syntax. For authorized OSCP exam/lab use only
 your head, then keep it open as a checklist during the exam — work top to bottom, but jump straight to
 whichever stage your current foothold calls for using the quick-reference at the bottom.
 
+> **Doing a standalone box, not the AD set?** This file is for the assumed-breach AD set. Its
+> counterpart for the three independent machines is
+> [`standalone-box-methodology.md`](standalone-box-methodology.md).
+
 ---
 
 ## 0. Exam Context Recap
