@@ -15,6 +15,35 @@ Nuclei scanning) — see that script's own warning banner. Everything else here 
 `--script vuln`, ffuf, feroxbuster, whatweb, enum4linux-ng, netexec, BloodHound, Certipy,
 Timeroast, hashcat) is unambiguously fine as a primary technique per the official exam guide.
 
+### "Automated exploitation is banned — do these scripts cross that line?" No.
+
+OffSec bans automatic **exploitation** — a tool that finds a vulnerability *and fires the exploit /
+drops a shell with no human decision in between* (`db_autopwn`, `browser_autopwn`, SQLmap
+`--os-shell`). Enumeration automation is explicitly fine — that's why AutoRecon/nmapAutomator are
+community-accepted. **The manual requirement attaches to the exploitation step, not to recon.** You
+do not have to run nmap by hand; you *do* have to be the one who decides what to exploit and runs it
+yourself, understanding each step.
+
+Every script here is on the enumeration side of that line by design — each **harvests or scans and
+then stops before the exploitation decision**:
+
+- `fast-nmap.sh` / `web-recon.sh` — recon and vuln *detection* (`--script vuln`, Nikto, nuclei-scoped
+  are all allowed; banned "mass vuln scanners" means Nessus/OpenVAS, which is why `--nuclei-full` is
+  gated). They find; they never exploit.
+- `ad-enum.sh` — the one that matters most: it **collects** Kerberoast/AS-REP hashes, BloodHound data,
+  and `certipy find` output, then hands *you* the decision to crack and the decision to run an ESC
+  exploit. It never cracks, never authenticates with a found credential, never fires an ESC chain.
+- `crack.sh` — hashcat on hashes you already have, offline, local data; never touches a target.
+- `hashid-credcheck.sh` — hash-type ID (offline), or a reuse sweep with a credential *you* supply
+  (using a known credential is normal OSCP work, not auto-exploitation).
+- `privesc-launcher.sh` — stages an enumerator (linPEAS/winPEAS); doesn't remote-execute or escalate.
+- `ligolo-setup.sh` — pivoting/tunnelling; not exploitation at all.
+
+The OffSec test is *"the candidate is responsible for knowing what any chosen tool does internally."*
+None of these need to be made "more manual" — they automate the part you're allowed to automate. The
+one carve-out in the other direction: you *may* use fully automated exploitation (Metasploit modules +
+Meterpreter) against **one** standalone machine of your choice — never the AD set.
+
 ## Scripts
 
 | Script | Purpose | Usage |
@@ -22,7 +51,7 @@ Timeroast, hashcat) is unambiguously fine as a primary technique per the officia
 | `fast-nmap.sh` | Full recon sequence: fast TCP sweep → targeted `-sC`/`-sV` rescan → parallel UDP top-100 → targeted UDP rescan → `--script vuln` | `./fast-nmap.sh <target>` |
 | `web-recon.sh` | whatweb fingerprint, TLS cert SAN grab, robots.txt/sitemap, ffuf vhost fuzzing, feroxbuster dirs/files, scoped nuclei — probes `http://` and `https://` up front and runs every stage against whichever responds, so an HTTPS-only box is scanned fully | `./web-recon.sh <target> [--domain example.com] [--nuclei-full]` |
 | `ad-enum.sh` | Post-foothold AD sweep: enum4linux-ng, Timeroast, AS-REP/Kerberoast, RID-brute, GPP/LAPS, delegation, ADCS triage, BloodHound collection — parses out `users.txt` and echoes the right `hashcat -m` mode per hash file found | `./ad-enum.sh <dc_ip> <domain> [-u user -p pass]` |
-| `ligolo-setup.sh` | Attacker-side ligolo-ng TUN + proxy setup, prints the exact agent-side connect-back command to paste onto the pivot host | `./ligolo-setup.sh` (or `--teardown`) |
+| `ligolo-setup.sh` | Attacker-side ligolo-ng TUN + proxy setup in one command: auto-detects your VPN IP, pre-stages kernel routes (`--route`), optionally serves the agent binary over the VPN so transfer is one line (`--serve`), prints the exact agent connect-back + in-console steps | `./ligolo-setup.sh [--route CIDR]... [--port N] [--serve]` (or `--teardown`) |
 | `hashid-credcheck.sh` | `hash` subcommand identifies a hash format and echoes the hashcat mode; `cred` subcommand sweeps a found credential across smb/winrm/rdp/mssql/ssh/ftp | `./hashid-credcheck.sh hash <string-or-file>` / `./hashid-credcheck.sh cred <target> <user> <pass_or_hash>` |
 | `privesc-launcher.sh` | Stages linPEAS or winPEAS (+ prints PrivescCheck one-liner) and the transfer options to get it onto target | `./privesc-launcher.sh <linux\|windows>` |
 | `crack.sh` | hashcat wrapper — auto-detects mode via the shared lib, defaults to rockyou.txt (+ OneRuleToRuleThemAll with `--rules`), can crack an entire `ad-enum.sh` output directory in one pass | `./crack.sh <hash-file-or-dir> [wordlist] [--rules]` |
@@ -77,4 +106,6 @@ spammed, not that evidence isn't kept for your report.
 6. `crack.sh ad-enum-out/<dc_ip> --rules` to work through whatever hashes it harvested.
 7. `hashid-credcheck.sh cred <range> <user> <cracked_pass_or_hash>` to see where else a cracked
    credential works.
-8. `ligolo-setup.sh` once you need to reach a second network segment.
+8. `ligolo-setup.sh --route <internal_subnet>/24 --serve` once you need to reach a second network
+   segment — pass the subnet you found on the first box and it's routed the moment you `start` in the
+   console; `--serve` hosts the agent so getting it onto the pivot is a single `wget`/`certutil` line.

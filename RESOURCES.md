@@ -18,6 +18,7 @@ to **authorized** penetration testing education and OSCP exam preparation.
 [`MACHINES.md`](MACHINES.md) (this repo's own curated list of 107 OSCP-like HTB machines, matched to
 0xdf writeups and ippsec videos) ·
 [`notes/ad-methodology-end-to-end.md`](notes/ad-methodology-end-to-end.md) ·
+[`notes/ad-assumed-breach-catalog.md`](notes/ad-assumed-breach-catalog.md) (dense every-method command sheet) ·
 [`notes/adcs-certipy-cheatsheet.md`](notes/adcs-certipy-cheatsheet.md) ·
 [`notes/ad-coercion-and-relay.md`](notes/ad-coercion-and-relay.md) ·
 [`notes/ad-delegation-trust-bloodhound.md`](notes/ad-delegation-trust-bloodhound.md) ·
@@ -50,7 +51,10 @@ to **authorized** penetration testing education and OSCP exam preparation.
 > BloodHound → domain compromise) — everything else AD-related in this repo (delegation/trust/ACL abuse,
 > ADCS, coercion/relay, password attacks, credential harvesting, lateral movement, domain-privesc CVEs)
 > is the command reference it links into at each stage. Read that file top to bottom once, then use it
-> as an exam-day checklist; go to the individual notes files for actual syntax.
+> as an exam-day checklist; go to the individual notes files for actual syntax. For a single dense sheet
+> of **every assumed-breach method** as copy-paste one-liners (with the speed/execution lessons from
+> candidates who failed the AD set), keep [`notes/ad-assumed-breach-catalog.md`](notes/ad-assumed-breach-catalog.md)
+> open alongside it — the walkthrough decides, the catalog executes.
 
 ---
 

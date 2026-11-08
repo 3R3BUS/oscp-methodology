@@ -7,6 +7,8 @@ It deliberately does not re-paste command blocks that already live in the compan
 follow each pointer for the actual syntax. For authorized OSCP exam/lab use only.*
 
 > **Helper script:** [`scripts/ad-enum.sh`](../scripts/README.md) automates the enumeration stages below (enum4linux-ng, RID brute, Kerberoast, AS-REP roast, BloodHound collection, ADCS triage, GPP/LAPS, and more) in one command.
+>
+> **Companion catalog:** this file is the *sequencing* layer (what to try in what order, and why). For the *dense command reference* — every assumed-breach method as a copy-paste one-liner with when-to-use and expected yield, plus the execution-discipline/speed lessons that separate a pass from a fail — see [`ad-assumed-breach-catalog.md`](ad-assumed-breach-catalog.md). Use this doc to decide; use the catalog to execute fast.
 
 **How to use this document:** read it once end-to-end before exam day so the shape of the chain is in
 your head, then keep it open as a checklist during the exam — work top to bottom, but jump straight to
