@@ -6,6 +6,7 @@ OffSec grades against their document, so start from theirs and use these to fill
 
 | File | Use it for | When |
 |---|---|---|
+| [`pre-exam-checklist.md`](pre-exam-checklist.md) | Pre-flight: tooling, VPN, notes, logistics all working before the clock starts | The day before |
 | [`target-note.md`](target-note.md) | One copy per target, opened the moment you start enumerating | Exam day, live |
 | [`ad-set-note.md`](ad-set-note.md) | The AD chain as a whole — credential ledger, host map, path tracking | Exam day, live |
 | [`exam-report.md`](exam-report.md) | The full report skeleton, section by section | Write-up window |
