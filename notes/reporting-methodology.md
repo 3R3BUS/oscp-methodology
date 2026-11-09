@@ -221,6 +221,21 @@ write-up window — catching a missing screenshot with 20 minutes left is a bad 
       requirement — confirm this is the current required format against the live OffSec exam guide
       before exam day, since submission mechanics are the kind of detail OffSec updates independent of
       the scoring model.
+
+**Export + package commands** (if you wrote in Markdown; if you authored directly in the official
+`.docx`/`.odt`, export to PDF from the office suite instead and skip the pandoc step):
+```bash
+# Markdown -> PDF  (needs: apt install pandoc texlive-latex-recommended texlive-latex-extra)
+pandoc report.md -o OSCP-OS-XXXXX-Exam-Report.pdf
+#   with margins / a specific engine if the default LaTeX run complains:
+pandoc report.md --pdf-engine=xelatex -V geometry:margin=2cm -o OSCP-OS-XXXXX-Exam-Report.pdf
+
+# Package the PDF into a .7z  (needs: apt install p7zip-full)
+7z a OSCP-OS-XXXXX-Exam-Report.7z OSCP-OS-XXXXX-Exam-Report.pdf
+7z l OSCP-OS-XXXXX-Exam-Report.7z        # verify it opens and contains the PDF before uploading
+```
+Use the exact filename convention from the live exam guide (`OS-XXXXX` is your OSID). Do the export
+with time to spare — §4 above flags last-minute PDF conversion as a classic avoidable failure.
 - [ ] File naming follows whatever convention the current exam portal instructions specify (typically
       OSID-based) — check the portal instructions directly rather than assuming last year's convention
       still holds.
