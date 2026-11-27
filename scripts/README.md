@@ -55,6 +55,18 @@ Meterpreter) against **one** standalone machine of your choice — never the AD 
 | `hashid-credcheck.sh` | `hash` subcommand identifies a hash format and echoes the hashcat mode; `cred` subcommand sweeps a found credential across smb/winrm/rdp/mssql/ssh/ftp | `./hashid-credcheck.sh hash <string-or-file>` / `./hashid-credcheck.sh cred <target> <user> <pass_or_hash>` |
 | `privesc-launcher.sh` | Stages linPEAS or winPEAS (+ prints PrivescCheck one-liner) and the transfer options to get it onto target | `./privesc-launcher.sh <linux\|windows>` |
 | `crack.sh` | hashcat wrapper — auto-detects mode via the shared lib, defaults to rockyou.txt (+ OneRuleToRuleThemAll with `--rules`), can crack an entire `ad-enum.sh` output directory in one pass | `./crack.sh <hash-file-or-dir> [wordlist] [--rules]` |
+| `exam-box-setup.sh` | One-shot VM provisioner — `apt` full-upgrade, installs the whole toolset (latest stable from Kali repos), Timeroast, SecLists + rockyou, sets terminator default, configures zsh (100k shared history + autosuggestions + syntax highlighting), creates the `targets` helper, enables terminal logging, symlinks these scripts onto PATH, prints a verification table. Idempotent — re-run to rebuild a dead VM. | `./exam-box-setup.sh [--dry-run] [--no-banned]` |
+
+After running `exam-box-setup.sh`, set your box IPs once and reuse them everywhere (zsh
+autosuggestions then complete them as you type): `targets set BOX1 10.10.10.5`,
+`targets set dc 10.10.10.10`, `targets set DOMAIN corp.local`, then `targets hosts` to write the
+AD names into `/etc/hosts`. The values come back as `$BOX1`, `$DC`, `$DOMAIN`, etc. in every new
+shell — e.g. `fast-nmap.sh $BOX1`.
+
+The setup also seeds your zsh history with ready-to-run, var-filled invocations of every helper
+(`fast-nmap.sh $BOX1`, `ad-enum.sh $DC $DOMAIN -u <user> -p <pass>`, …). So you type fast,
+autosuggestions complete the whole line, and you just flip the `1` to a `2` for the next box — no
+flags to recall. Nothing has a hardcoded IP; the `$BOX*` vars resolve to whatever `targets set`.
 
 `lib/hashmodes.sh` is a shared library (not a standalone script) sourced by **three** callers —
 `hashid-credcheck.sh`, `crack.sh`, and `ad-enum.sh` (for its end-of-run "here's how to crack what I
