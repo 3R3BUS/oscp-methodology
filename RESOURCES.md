@@ -425,8 +425,8 @@ sections exist" and "I know what depth looks like" is where most first-report an
 > `web-recon.sh`, `ad-enum.sh`, `ligolo-setup.sh`, `hashid-credcheck.sh`, `privesc-launcher.sh`,
 > `crack.sh`) that operationalize the command sequences already documented across `CHEATSHEET.md`
 > and `notes/*.md` into single commands, rather than fifteen copy-pastes. Enumeration/harvesting
-> only — no auto-exploitation, same scope discipline as the rest of this repo (see the README's own
-> exam-scope note on `web-recon.sh --nuclei-full`, the one genuinely gray flag in the set).
+> only — no auto-exploitation, same scope discipline as the rest of this repo. Nuclei is
+> deliberately not used by any script (it's an exam-banned automated vuln scanner).
 
 ## 15. Internal Cross-References
 
@@ -527,8 +527,8 @@ sections exist" and "I know what depth looks like" is where most first-report an
 - [x] Executable helper scripts operationalizing the documented command sequences (recon, web recon,
       post-foothold AD enumeration, ligolo pivoting, local-privesc staging, hash cracking) — done, see
       §14.5 above and [`scripts/README.md`](scripts/README.md). Enumeration/harvesting only, matching this repo's
-      established exam-scope discipline; the one gray area (`web-recon.sh --nuclei-full`) is gated
-      behind an explicit opt-in flag and warning banner rather than being default behavior.
+      established exam-scope discipline; nuclei is deliberately not used by any script, since it's an
+      exam-banned automated vulnerability scanner.
 
 - [x] Passive recon / OSINT methodology (PEN-200 Module 3) — whois, Google dorking, theHarvester,
       Certificate Transparency, Shodan/Censys, recon-ng, email enumeration, metadata extraction — done,

@@ -45,7 +45,7 @@ prefer to navigate from there.
 
 ```bash
 ./scripts/fast-nmap.sh <target>                       # full nmap sequence, one command
-./scripts/web-recon.sh <target> [--domain x.com]      # whatweb/ffuf/ferox/nuclei, http+https
+./scripts/web-recon.sh <target> [--domain x.com]      # whatweb/ffuf/ferox, http+https
 ./scripts/ad-enum.sh <dc_ip> <domain> [-u u -p p]     # AD sweep → hashcat-ready files + users.txt
 ./scripts/crack.sh <hash-file-or-dir> [wordlist] --rules
 ./scripts/ligolo-setup.sh --route <subnet>/24 --serve # one command to a fully-routed pivot

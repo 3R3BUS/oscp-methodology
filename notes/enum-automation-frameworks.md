@@ -34,7 +34,7 @@ git clone https://github.com/six2dez/reconftw.git && cd reconftw && ./install.sh
 ./reconftw.sh -d example.com -r    # passive/recon-only
 ./reconftw.sh -d example.com -a    # full scan incl. vuln checks
 ```
-**Caution:** its active-vuln-scan modules (Nuclei-based) can cross into the exam's banned "vulnerability scanning" territory depending on flags — avoid `-a`/vuln-scan flags on exam day, or scope invocation carefully.
+**Caution:** its active-vuln-scan modules are **Nuclei-based, and nuclei is exam-banned** (an automated vulnerability scanner, the Nessus/OpenVAS category OffSec prohibits). Never run `-a` or any vuln-scan flag on the exam — stick to the passive/recon-only mode (`-r`). Lab/bug-bounty use only.
 **Reference:** https://github.com/six2dez/reconftw (docs: https://docs.reconftw.com/)
 
 ---

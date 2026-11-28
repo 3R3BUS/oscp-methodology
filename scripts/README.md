@@ -10,10 +10,11 @@ scanning are all standard, exam-safe OSCP techniques — these scripts just save
 retyping fifteen commands by hand.
 
 **Before running any of these against the real OSCP exam network**, re-read `EXAM-TIPS.md`.
-The one genuinely gray area in this set is `web-recon.sh --nuclei-full` (full-template-set
-Nuclei scanning) — see that script's own warning banner. Everything else here (nmap incl.
-`--script vuln`, ffuf, feroxbuster, whatweb, enum4linux-ng, netexec, BloodHound, Certipy,
-Timeroast, hashcat) is unambiguously fine as a primary technique per the official exam guide.
+Everything in this set (nmap incl. `--script vuln`, ffuf, feroxbuster, whatweb, Nikto,
+enum4linux-ng, netexec, BloodHound, Certipy, Timeroast, hashcat) is a standard, exam-safe
+OSCP technique per the official exam guide. **Nuclei is deliberately absent** — it is an
+automated vulnerability scanner, the category OffSec explicitly bans ("mass vulnerability
+scanners e.g. Nessus, OpenVAS"), so no script here invokes it (see `web-recon.sh`'s header).
 
 ### "Automated exploitation is banned — do these scripts cross that line?" No.
 
@@ -27,9 +28,9 @@ yourself, understanding each step.
 Every script here is on the enumeration side of that line by design — each **harvests or scans and
 then stops before the exploitation decision**:
 
-- `fast-nmap.sh` / `web-recon.sh` — recon and vuln *detection* (`--script vuln`, Nikto, nuclei-scoped
-  are all allowed; banned "mass vuln scanners" means Nessus/OpenVAS, which is why `--nuclei-full` is
-  gated). They find; they never exploit.
+- `fast-nmap.sh` / `web-recon.sh` — recon and vuln *detection* (`--script vuln` and Nikto are
+  allowed; the banned "mass vuln scanners" are Nessus/OpenVAS **and nuclei**, so no script here
+  runs nuclei at all). They find; they never exploit.
 - `ad-enum.sh` — the one that matters most: it **collects** Kerberoast/AS-REP hashes, BloodHound data,
   and `certipy find` output, then hands *you* the decision to crack and the decision to run an ESC
   exploit. It never cracks, never authenticates with a found credential, never fires an ESC chain.
@@ -49,7 +50,7 @@ Meterpreter) against **one** standalone machine of your choice — never the AD 
 | Script | Purpose | Usage |
 |---|---|---|
 | `fast-nmap.sh` | Full recon sequence: fast TCP sweep → targeted `-sC`/`-sV` rescan → parallel UDP top-100 → targeted UDP rescan → `--script vuln` | `./fast-nmap.sh <target>` |
-| `web-recon.sh` | whatweb fingerprint, TLS cert SAN grab, robots.txt/sitemap, ffuf vhost fuzzing, feroxbuster dirs/files, scoped nuclei — probes `http://` and `https://` up front and runs every stage against whichever responds, so an HTTPS-only box is scanned fully | `./web-recon.sh <target> [--domain example.com] [--nuclei-full]` |
+| `web-recon.sh` | whatweb fingerprint, TLS cert SAN grab, robots.txt/sitemap, ffuf vhost fuzzing, feroxbuster dirs/files — probes `http://` and `https://` up front and runs every stage against whichever responds, so an HTTPS-only box is scanned fully | `./web-recon.sh <target> [--domain example.com]` |
 | `ad-enum.sh` | Post-foothold AD sweep: enum4linux-ng, Timeroast, AS-REP/Kerberoast, RID-brute, GPP/LAPS, delegation, ADCS triage, BloodHound collection — parses out `users.txt` and echoes the right `hashcat -m` mode per hash file found | `./ad-enum.sh <dc_ip> <domain> [-u user -p pass]` |
 | `ligolo-setup.sh` | Attacker-side ligolo-ng TUN + proxy setup in one command: auto-detects your VPN IP, pre-stages kernel routes (`--route`), optionally serves the agent binary over the VPN so transfer is one line (`--serve`), prints the exact agent connect-back + in-console steps | `./ligolo-setup.sh [--route CIDR]... [--port N] [--serve]` (or `--teardown`) |
 | `hashid-credcheck.sh` | `hash` subcommand identifies a hash format and echoes the hashcat mode; `cred` subcommand sweeps a found credential across smb/winrm/rdp/mssql/ssh/ftp | `./hashid-credcheck.sh hash <string-or-file>` / `./hashid-credcheck.sh cred <target> <user> <pass_or_hash>` |
@@ -85,7 +86,7 @@ Two implementation notes for anyone editing it:
 
 ## Dependencies
 
-`nmap`, `ffuf`, `feroxbuster`, `whatweb`, `nuclei`, `curl`, `openssl`, `jq`, `python3` (all Kali
+`nmap`, `ffuf`, `feroxbuster`, `whatweb`, `curl`, `openssl`, `jq`, `python3` (all Kali
 defaults or one `apt`/`go install` away), `enum4linux-ng`, `netexec`/`nxc`, `bloodhound-python`,
 `certipy-ad`, `hashcat`, [ligolo-ng](https://github.com/nicocha30/ligolo-ng) `proxy`/`agent`
 binaries (download from releases), and [SecuraBV/Timeroast](https://github.com/SecuraBV/Timeroast)'s

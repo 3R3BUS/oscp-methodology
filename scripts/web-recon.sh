@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # web-recon.sh -- whatweb fingerprint, TLS SAN grab, robots.txt/sitemap.xml, ffuf vhost fuzzing,
-# feroxbuster dir/file discovery, and a scoped nuclei pass (full-template nuclei is opt-in only).
+# and feroxbuster dir/file discovery.
+#
+# NO nuclei: nuclei is an automated vulnerability scanner, the category the OSCP/OSCP+ exam
+# explicitly prohibits ("mass vulnerability scanners e.g. Nessus, OpenVAS"). It is intentionally
+# not wired into this script at all -- not by default, not scoped, not behind a flag. For allowed,
+# targeted vuln detection use Nikto or nmap --script vuln (see fast-nmap.sh) instead.
 #
 # NOTE: VulnX is intentionally NOT integrated here. It ships a separate auto-exploitation capability
 # ("-e"/"--exploit") that its own docs describe as an "auto shell injector" -- independently finds a
@@ -9,12 +14,11 @@
 # repo's exam-scope discipline, VulnX stays reference-only and is never wired into this script's
 # default or opt-in behavior, even restricted to its non-exploit fingerprinting flags.
 #
-# Usage: web-recon.sh <target-ip-or-host> [--domain example.com] [--nuclei-full]
+# Usage: web-recon.sh <target-ip-or-host> [--domain example.com]
 set -uo pipefail
 
 TARGET=""
 DOMAIN=""
-NUCLEI_FULL=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -24,9 +28,8 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             DOMAIN="$2"; shift 2 ;;
-        --nuclei-full) NUCLEI_FULL=1; shift ;;
         -h|--help)
-            echo "Usage: $0 <target-ip-or-host> [--domain example.com] [--nuclei-full]" >&2
+            echo "Usage: $0 <target-ip-or-host> [--domain example.com]" >&2
             exit 0 ;;
         *)
             if [[ -n "$TARGET" ]]; then
@@ -38,14 +41,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TARGET" ]]; then
-    echo "Usage: $0 <target-ip-or-host> [--domain example.com] [--nuclei-full]" >&2
+    echo "Usage: $0 <target-ip-or-host> [--domain example.com]" >&2
     exit 1
 fi
 
 for tool in whatweb feroxbuster ffuf curl; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "[!] $tool not found -- some stages will be skipped." >&2
-        echo "    Install: sudo apt install whatweb feroxbuster ffuf curl   (nuclei: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest)" >&2
+        echo "    Install: sudo apt install whatweb feroxbuster ffuf curl" >&2
     fi
 done
 
@@ -157,35 +160,6 @@ if command -v feroxbuster >/dev/null 2>&1; then
     fi
 fi
 
-# --- nuclei: scoped by default, full template set only behind --nuclei-full ---
-if command -v nuclei >/dev/null 2>&1; then
-    if [[ $NUCLEI_FULL -eq 1 ]]; then
-        cat >&2 <<'EOF'
-[!] EXAM-SCOPE WARNING: --nuclei-full runs the entire default nuclei template repository
-    (12,000+ templates spanning CVEs, misconfigs, exposures) against this target. Running
-    the full template set is functionally a mass automated vulnerability scan -- the same
-    category of tool ("mass vulnerability scanners e.g. Nessus, OpenVAS") the OSCP exam
-    guide explicitly prohibits. Fine for HTB/labs/real engagements; do NOT use --nuclei-full
-    on the actual OSCP exam. The scoped default run (no flag) stays within Nikto/NSE-vuln
-    territory, which is explicitly allowed.
-EOF
-        for scheme in "${SCHEMES[@]}"; do
-            SFX=""
-            [[ "$scheme" == "https" && ${#SCHEMES[@]} -gt 1 ]] && SFX="-https"
-            echo "[*] nuclei (FULL template set over $scheme, exam-risk -- see warning above)"
-            nuclei -u "$scheme://$TARGET" -o "$OUT/nuclei-full${SFX}.txt"
-        done
-    else
-        for scheme in "${SCHEMES[@]}"; do
-            SFX=""
-            [[ "$scheme" == "https" && ${#SCHEMES[@]} -gt 1 ]] && SFX="-https"
-            echo "[*] nuclei over $scheme (scoped: tech/panel/misconfig/default-login only, dos+fuzz excluded)"
-            nuclei -u "$scheme://$TARGET" -tags tech,exposed-panel,misconfig,default-login \
-                -etags dos,fuzz -o "$OUT/nuclei-scoped${SFX}.txt"
-        done
-    fi
-fi
-
 echo
 echo "=================== SUMMARY: $TARGET ==================="
 [[ -s "$OUT/whatweb.txt" ]] && echo "-- whatweb --" && cat "$OUT/whatweb.txt"
@@ -194,9 +168,6 @@ for f in "$OUT/ferox.txt" "$OUT/ferox-https.txt"; do
         echo "-- $(basename "$f") hits (2xx/3xx) --"
         grep -E '^(2[0-9]{2}|3[0-9]{2})[[:space:]]' "$f" 2>/dev/null | head -n 40
     fi
-done
-for f in "$OUT"/nuclei-*.txt; do
-    [[ -s "$f" ]] && echo "-- $(basename "$f") --" && cat "$f"
 done
 echo "==========================================================="
 echo "[*] Full raw output saved under: $OUT/"

@@ -72,7 +72,8 @@ apt_pkgs=(
     # shell / terminal experience
     terminator zsh zsh-autosuggestions zsh-syntax-highlighting
     # recon / web
-    nmap ffuf feroxbuster gobuster whatweb nuclei nikto wpscan
+    # NB: nuclei deliberately NOT installed -- it's an automated vuln scanner, exam-banned.
+    nmap ffuf feroxbuster gobuster whatweb nikto wpscan
     # AD / SMB / LDAP (netexec pulls in bloodhound.py + certipy-ad as deps)
     netexec certipy-ad bloodhound.py bloodhound sharphound enum4linux-ng
     smbclient smbmap ldap-utils rpcbind krb5-user impacket-scripts evil-winrm
@@ -320,7 +321,7 @@ fi
 # ---------------------------------------------------------------------------
 say "10/10  Verification"
 if [[ $DRY_RUN -eq 0 ]]; then
-    check=(nmap ffuf feroxbuster whatweb nuclei nxc certipy-ad bloodhound-python hashcat john
+    check=(nmap ffuf feroxbuster whatweb nxc certipy-ad bloodhound-python hashcat john
            hydra evil-winrm impacket-secretsdump ligolo-proxy proxychains4 sshuttle chisel
            timeroast.py fast-nmap.sh ad-enum.sh)
     printf '\n%-22s %s\n' "TOOL" "STATUS"
