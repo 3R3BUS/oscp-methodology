@@ -197,7 +197,7 @@ say "6/10  zsh: big history + autosuggestions + syntax highlighting"
 ZSHRC="$HOME/.zshrc"
 OSCP_ZSH="$HOME/.oscp-zsh.sh"
 if [[ $DRY_RUN -eq 1 ]]; then
-    echo "[dry-run] write $OSCP_ZSH (100k shared history, autosuggest, highlighting) and source it from $ZSHRC"
+    echo "[dry-run] write $OSCP_ZSH (100k shared history, autosuggest, highlighting, OSC7 cwd-tracking) and source it from $ZSHRC"
 else
     # Plugin paths as Kali's apt packages install them.
     AUTOSUGGEST=/usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
@@ -223,6 +223,25 @@ ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 
 # --- your box targets (set once with 'targets', reused as \$BOX1 etc.) ---
 [ -f "\$HOME/.oscp-targets" ] && source "\$HOME/.oscp-targets"
+
+# --- OSC 7: advertise the real cwd to the terminal so terminator's Ctrl+Shift+E / O / T
+#     split/tab open in the SAME directory you're standing in. Needed because the step-8
+#     terminal-logging 'script' wrapper sits between zsh and terminator, so terminator can't
+#     read our cwd from the process table and otherwise falls back to \$HOME on every split. ---
+autoload -Uz add-zsh-hook
+_osc7_cwd() {
+    local enc="" i c
+    for (( i = 1; i <= \${#PWD}; i++ )); do
+        c="\${PWD[i]}"
+        case "\$c" in
+            [a-zA-Z0-9/._~-]) enc+="\$c" ;;
+            *) enc+="\$(printf '%%%02X' "'\$c")" ;;
+        esac
+    done
+    printf '\e]7;file://%s%s\a' "\$HOST" "\$enc"
+}
+add-zsh-hook chpwd _osc7_cwd
+_osc7_cwd
 
 # --- syntax highlighting: must be sourced LAST ---
 [ -f "$HIGHLIGHT" ] && source "$HIGHLIGHT"
