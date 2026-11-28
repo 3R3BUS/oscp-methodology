@@ -138,7 +138,7 @@ say "5/10  Terminator as default terminal"
 # any 'x-terminal-emulator' call open terminator. Xfce (Kali default) also keeps its own
 # keybinding, which we point at terminator too. Both are no-ops if already set.
 if [[ $DRY_RUN -eq 1 ]]; then
-    echo "[dry-run] set x-terminal-emulator alternative to terminator; point Xfce launcher keybind at it"
+    echo "[dry-run] set x-terminal-emulator alternative to terminator; point Xfce launcher keybind at it; write ~/.config/terminator/config"
 elif command -v terminator >/dev/null 2>&1; then
     tpath="$(command -v terminator)"
     sudo update-alternatives --set x-terminal-emulator "$tpath" >/dev/null 2>&1 \
@@ -153,6 +153,39 @@ elif command -v terminator >/dev/null 2>&1; then
     # Make exo (Xfce's 'preferred applications') open terminator too.
     run mkdir -p "$HOME/.config/xfce4"
     [[ $DRY_RUN -eq 0 ]] && printf 'TerminalEmulator=terminator\n' > "$HOME/.config/xfce4/helpers.rc" 2>/dev/null || true
+
+    # Terminator profile: maximised window + transparent background. Written idempotently -- skipped
+    # if it already matches, and an existing differing config is backed up once before overwrite.
+    tcfg="$HOME/.config/terminator/config"
+    mkdir -p "$HOME/.config/terminator"
+    tmpcfg="$(mktemp)"
+    cat > "$tmpcfg" <<'TCONF'
+[global_config]
+  window_state = maximise
+[keybindings]
+[profiles]
+  [[default]]
+    background_darkness = 0.9
+    background_type = transparent
+[layouts]
+  [[default]]
+    [[[window0]]]
+      type = Window
+      parent = ""
+    [[[child1]]]
+      type = Terminal
+      parent = window0
+[plugins]
+TCONF
+    if [[ -f "$tcfg" ]] && cmp -s "$tmpcfg" "$tcfg"; then
+        echo "Terminator config already matches."
+        rm -f "$tmpcfg"
+    else
+        if [[ -f "$tcfg" ]]; then
+            cp "$tcfg" "$tcfg.bak-$(date +%Y%m%d-%H%M%S)" && warn "Backed up existing terminator config."
+        fi
+        mv "$tmpcfg" "$tcfg" && echo "Wrote $tcfg (maximise window + transparent background)."
+    fi
 else
     FAILURES+=("terminator not installed; default-terminal step skipped")
 fi
